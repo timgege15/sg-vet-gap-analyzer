@@ -26,27 +26,36 @@
 const map = L.map('map').setView([1.3521, 103.8198], 11);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18
+  maxZoom: 18,
+  attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
 const markerCluster = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
 const gapLayer = L.layerGroup();
 
+/* ==============================
+   LOAD URA ZONING (NON-BLOCKING)
+============================== */
+
 let uraFeatures = [];
 
-/* Load URA Zoning (non-blocking) */
 fetch('ura-landuse-simplified.geojson')
   .then(res => res.json())
   .then(data => {
     uraFeatures = data.features;
     console.log("URA zoning loaded:", uraFeatures.length);
   })
-  .catch(err => console.log("URA load failed:", err));
+  .catch(err => {
+    console.log("URA load failed:", err);
+  });
 
-/* Clinics + Buffers */
+/* ==============================
+   CLINICS + BUFFERS
+============================== */
 
 locations.forEach(location => {
+
   const marker = L.marker([location.lat, location.lng]);
   markerCluster.addLayer(marker);
 
@@ -63,7 +72,9 @@ locations.forEach(location => {
 map.addLayer(markerCluster);
 map.addLayer(bufferLayer);
 
-/* Distance function */
+/* ==============================
+   DISTANCE FUNCTION
+============================== */
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -80,7 +91,9 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* Build Gap Grid */
+/* ==============================
+   BUILD GAP GRID (UNCHANGED)
+============================== */
 
 function buildGrid() {
 
@@ -124,8 +137,12 @@ function buildGrid() {
 
 setTimeout(buildGrid, 500);
 
+/* ==============================
+   LAYER CONTROLS
+============================== */
+
 L.control.layers(null, {
-  "Clinics": markerCluster,
+  "Clinics (Clustered)": markerCluster,
   "1km Buffers": bufferLayer,
   "White-Space >1km": gapLayer
 }).addTo(map);
