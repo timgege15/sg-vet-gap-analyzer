@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>SG Vet Gap Analyzer</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+
+<style>
+  body { margin: 0; }
+  #map { height: 100vh; }
+
+  .popup-title {
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+
+  .clinic-entry {
+    margin-bottom: 8px;
+  }
+
+  .clinic-phone {
+    color: #2b7bff;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script src="locations.js"></script>
+
+<script>
+const map = L.map('map').setView([1.3521, 103.8198], 11);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const markerCluster = L.markerClusterGroup();
+const bufferLayer = L.layerGroup();
+
+locations.forEach(location => {
+
+  const marker = L.marker([location.lat, location.lng]);
+
+  let popupContent = `
+    <div class="popup-title">${location.address}</div>
+  `;
+
+  location.clinics.forEach(clinic => {
+    popupContent += `
+      <div class="clinic-entry">
+        <b>${clinic.name}</b><br>
+        <span class="clinic-phone">📞 ${clinic.phone}</span>
+      </div>
+    `;
+  });
+
+  marker.bindPopup(popupContent);
+
+  markerCluster.addLayer(marker);
+
+  // 1km buffer
+  const buffer = L.circle([location.lat, location.lng], {
+    radius: 1000,
+    color: '#2b7bff',
+    weight: 1,
+    fillColor: '#2b7bff',
+    fillOpacity: 0.05
+  });
+
+  bufferLayer.addLayer(buffer);
+});
+
+map.addLayer(markerCluster);
+
+L.control.layers(null, {
+  "Clinics (Clustered)": markerCluster,
+  "1km Buffers": bufferLayer
+}).addTo(map);
+
+</script>
+
+</body>
+</html>
