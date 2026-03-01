@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.js"></script>
 
 <style>
   body { margin: 0; }
@@ -47,27 +47,34 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 const markerCluster = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
-const gapLayer = L.layerGroup();
+
+const residentialLayer = L.layerGroup();
+const industrialLayer = L.layerGroup();
+const militaryLayer = L.layerGroup();
 
 let uraFeatures = [];
 
-/* ==============================
+/* ============================
    LOAD URA
-============================== */
+============================ */
 
 fetch('ura-landuse-simplified.geojson')
   .then(res => res.json())
   .then(data => {
     uraFeatures = data.features;
     console.log("URA zoning loaded:", uraFeatures.length);
+    buildGrid(); // run only after zoning loaded
   });
 
-/* ==============================
+/* ============================
    CLINICS + BUFFERS
-============================== */
+============================ */
 
 locations.forEach(location => {
-  markerCluster.addLayer(L.marker([location.lat, location.lng]));
+
+  markerCluster.addLayer(
+    L.marker([location.lat, location.lng])
+  );
 
   bufferLayer.addLayer(
     L.circle([location.lat, location.lng], {
@@ -82,9 +89,9 @@ locations.forEach(location => {
 map.addLayer(markerCluster);
 map.addLayer(bufferLayer);
 
-/* ==============================
-   DISTANCE
-============================== */
+/* ============================
+   DISTANCE FUNCTION
+============================ */
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -101,9 +108,9 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* ==============================
-   POINT-IN-POLYGON
-============================== */
+/* ============================
+   POINT IN POLYGON
+============================ */
 
 function pointInPolygon(point, vs) {
   let x = point[0], y = point[1];
@@ -122,9 +129,9 @@ function pointInPolygon(point, vs) {
   return inside;
 }
 
-/* ==============================
+/* ============================
    CLASSIFY LANDUSE
-============================== */
+============================ */
 
 function classifyLanduse(lat, lng) {
 
@@ -151,9 +158,9 @@ function classifyLanduse(lat, lng) {
   return null;
 }
 
-/* ==============================
-   BUILD GRID WITH CLASSIFICATION
-============================== */
+/* ============================
+   BUILD GRID WITH ZONING
+============================ */
 
 function buildGrid() {
 
@@ -177,61 +184,72 @@ function buildGrid() {
         if (dist < minDistance) minDistance = dist;
       }
 
-      if (minDistance > 1000 && uraFeatures.length > 0) {
+      if (minDistance > 1000) {
 
         const zone = classifyLanduse(centerLat, centerLng);
-
-        let color = null;
-
         if (!zone) continue;
 
-        if (zone.includes("RESIDENTIAL")) color = "red";
-        else if (zone.includes("INDUSTRIAL")) color = "orange";
-        else if (zone.includes("MILITARY")) color = "black";
-        else if (zone.includes("WATERBODY")) continue;
+        let targetLayer = null;
+        let color = null;
 
-        if (color) {
-          L.rectangle([
-            [lat, lng],
-            [lat + cellSize, lng + cellSize]
-          ], {
-            color: color,
-            weight: 0.2,
-            fillColor: color,
-            fillOpacity: 0.35
-          }).addTo(gapLayer);
+        if (zone.includes("RESIDENTIAL")) {
+          targetLayer = residentialLayer;
+          color = "red";
         }
+        else if (zone.includes("INDUSTRIAL")) {
+          targetLayer = industrialLayer;
+          color = "orange";
+        }
+        else if (zone.includes("MILITARY")) {
+          targetLayer = militaryLayer;
+          color = "black";
+        }
+        else {
+          continue; // skip water or others
+        }
+
+        L.rectangle([
+          [lat, lng],
+          [lat + cellSize, lng + cellSize]
+        ], {
+          color: color,
+          weight: 0.2,
+          fillColor: color,
+          fillOpacity: 0.35
+        }).addTo(targetLayer);
       }
     }
   }
 
-  map.addLayer(gapLayer);
+  map.addLayer(residentialLayer);
+  map.addLayer(industrialLayer);
+  map.addLayer(militaryLayer);
 }
 
-setTimeout(buildGrid, 1000);
-
-/* ==============================
-   CONTROLS
-============================== */
+/* ============================
+   LAYER CONTROLS
+============================ */
 
 L.control.layers(null, {
   "Clinics": markerCluster,
   "1km Buffers": bufferLayer,
-  "Zoned White-Space": gapLayer
+  "Residential White-Space": residentialLayer,
+  "Industrial (Avoid)": industrialLayer,
+  "Military (Off-Limits)": militaryLayer
 }).addTo(map);
 
-/* ==============================
+/* ============================
    LEGEND
-============================== */
+============================ */
 
 const legend = L.control({position: 'bottomright'});
 
 legend.onAdd = function () {
   const div = L.DomUtil.create('div', 'legend');
   div.innerHTML += '<b>Legend</b><br><br>';
-  div.innerHTML += '<i style="background:red"></i> Residential White-Space<br>';
-  div.innerHTML += '<i style="background:orange"></i> Industrial White-Space<br>';
-  div.innerHTML += '<i style="background:black"></i> Military<br>';
+  div.innerHTML += '<i style="background:red"></i> Residential Opportunity<br>';
+  div.innerHTML += '<i style="background:orange"></i> Industrial (Low Demand)<br>';
+  div.innerHTML += '<i style="background:black"></i> Military (Restricted)<br>';
   div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition Radius<br>';
   return div;
 };
