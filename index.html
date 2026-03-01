@@ -21,6 +21,7 @@
     line-height: 18px;
     border-radius: 6px;
     box-shadow: 0 0 6px rgba(0,0,0,0.2);
+    font-size: 13px;
   }
 
   .legend i {
@@ -55,15 +56,47 @@ const militaryLayer = L.layerGroup();
 let uraFeatures = [];
 
 /* ============================
-   LOAD URA
+   LOAD URA + PRECOMPUTE BBOX
 ============================ */
 
 fetch('ura-landuse-simplified.geojson')
   .then(res => res.json())
   .then(data => {
-    uraFeatures = data.features;
-    console.log("URA zoning loaded:", uraFeatures.length);
-    buildGrid(); // run only after zoning loaded
+
+    uraFeatures = data.features.map(f => {
+
+      const geom = f.geometry;
+      let coords = [];
+
+      if (geom.type === "Polygon") {
+        coords = geom.coordinates[0];
+      } else if (geom.type === "MultiPolygon") {
+        coords = geom.coordinates[0][0];
+      }
+
+      let minLng = Infinity, maxLng = -Infinity;
+      let minLat = Infinity, maxLat = -Infinity;
+
+      coords.forEach(c => {
+        const lng = c[0];
+        const lat = c[1];
+
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      });
+
+      return {
+        geometry: geom,
+        lu: f.properties.LU_DESC,
+        bbox: { minLat, maxLat, minLng, maxLng }
+      };
+    });
+
+    console.log("URA zoning loaded + optimized:", uraFeatures.length);
+
+    buildGrid();
   });
 
 /* ============================
@@ -130,26 +163,35 @@ function pointInPolygon(point, vs) {
 }
 
 /* ============================
-   CLASSIFY LANDUSE
+   CLASSIFY LANDUSE (OPTIMIZED)
 ============================ */
 
 function classifyLanduse(lat, lng) {
 
   for (let feature of uraFeatures) {
 
+    const b = feature.bbox;
+
+    // Fast bounding box rejection
+    if (
+      lat < b.minLat || lat > b.maxLat ||
+      lng < b.minLng || lng > b.maxLng
+    ) {
+      continue;
+    }
+
     const geom = feature.geometry;
-    const lu = feature.properties.LU_DESC;
 
     if (geom.type === "Polygon") {
       if (pointInPolygon([lng, lat], geom.coordinates[0])) {
-        return lu;
+        return feature.lu;
       }
     }
 
     if (geom.type === "MultiPolygon") {
       for (let poly of geom.coordinates) {
         if (pointInPolygon([lng, lat], poly[0])) {
-          return lu;
+          return feature.lu;
         }
       }
     }
@@ -194,7 +236,7 @@ function buildGrid() {
 
         if (zone.includes("RESIDENTIAL")) {
           targetLayer = residentialLayer;
-          color = "red";
+          color = "green";
         }
         else if (zone.includes("INDUSTRIAL")) {
           targetLayer = industrialLayer;
@@ -202,10 +244,10 @@ function buildGrid() {
         }
         else if (zone.includes("MILITARY")) {
           targetLayer = militaryLayer;
-          color = "black";
+          color = "#444";
         }
         else {
-          continue; // skip water or others
+          continue;
         }
 
         L.rectangle([
@@ -233,9 +275,9 @@ function buildGrid() {
 L.control.layers(null, {
   "Clinics": markerCluster,
   "1km Buffers": bufferLayer,
-  "Residential White-Space": residentialLayer,
-  "Industrial (Avoid)": industrialLayer,
-  "Military (Off-Limits)": militaryLayer
+  "Residential Opportunity": residentialLayer,
+  "Industrial (Low Demand)": industrialLayer,
+  "Military (Restricted)": militaryLayer
 }).addTo(map);
 
 /* ============================
@@ -247,9 +289,9 @@ const legend = L.control({position: 'bottomright'});
 legend.onAdd = function () {
   const div = L.DomUtil.create('div', 'legend');
   div.innerHTML += '<b>Legend</b><br><br>';
-  div.innerHTML += '<i style="background:red"></i> Residential Opportunity<br>';
+  div.innerHTML += '<i style="background:green"></i> Residential Opportunity<br>';
   div.innerHTML += '<i style="background:orange"></i> Industrial (Low Demand)<br>';
-  div.innerHTML += '<i style="background:black"></i> Military (Restricted)<br>';
+  div.innerHTML += '<i style="background:#444"></i> Military (Restricted)<br>';
   div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition Radius<br>';
   return div;
 };
