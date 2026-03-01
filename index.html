@@ -19,7 +19,6 @@
     background: white;
     padding: 10px;
     line-height: 18px;
-    color: #333;
     border-radius: 6px;
     box-shadow: 0 0 6px rgba(0,0,0,0.2);
   }
@@ -43,28 +42,24 @@
 const map = L.map('map').setView([1.3521, 103.8198], 11);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18,
-  attribution: '&copy; OpenStreetMap contributors'
+  maxZoom: 18
 }).addTo(map);
 
 const markerCluster = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
 const gapLayer = L.layerGroup();
 
-/* ==============================
-   LOAD URA ZONING
-============================== */
-
 let uraFeatures = [];
+
+/* ==============================
+   LOAD URA
+============================== */
 
 fetch('ura-landuse-simplified.geojson')
   .then(res => res.json())
   .then(data => {
     uraFeatures = data.features;
     console.log("URA zoning loaded:", uraFeatures.length);
-  })
-  .catch(err => {
-    console.log("URA load failed:", err);
   });
 
 /* ==============================
@@ -72,25 +67,23 @@ fetch('ura-landuse-simplified.geojson')
 ============================== */
 
 locations.forEach(location => {
+  markerCluster.addLayer(L.marker([location.lat, location.lng]));
 
-  const marker = L.marker([location.lat, location.lng]);
-  markerCluster.addLayer(marker);
-
-  const buffer = L.circle([location.lat, location.lng], {
-    radius: 1000,
-    color: '#2b7bff',
-    weight: 1,
-    fillOpacity: 0.05
-  });
-
-  bufferLayer.addLayer(buffer);
+  bufferLayer.addLayer(
+    L.circle([location.lat, location.lng], {
+      radius: 1000,
+      color: '#2b7bff',
+      weight: 1,
+      fillOpacity: 0.05
+    })
+  );
 });
 
 map.addLayer(markerCluster);
 map.addLayer(bufferLayer);
 
 /* ==============================
-   DISTANCE FUNCTION
+   DISTANCE
 ============================== */
 
 function haversine(lat1, lon1, lat2, lon2) {
@@ -109,7 +102,57 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 
 /* ==============================
-   BUILD GAP GRID
+   POINT-IN-POLYGON
+============================== */
+
+function pointInPolygon(point, vs) {
+  let x = point[0], y = point[1];
+  let inside = false;
+
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    let xi = vs[i][0], yi = vs[i][1];
+    let xj = vs[j][0], yj = vs[j][1];
+
+    let intersect = ((yi > y) != (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+/* ==============================
+   CLASSIFY LANDUSE
+============================== */
+
+function classifyLanduse(lat, lng) {
+
+  for (let feature of uraFeatures) {
+
+    const geom = feature.geometry;
+    const lu = feature.properties.LU_DESC;
+
+    if (geom.type === "Polygon") {
+      if (pointInPolygon([lng, lat], geom.coordinates[0])) {
+        return lu;
+      }
+    }
+
+    if (geom.type === "MultiPolygon") {
+      for (let poly of geom.coordinates) {
+        if (pointInPolygon([lng, lat], poly[0])) {
+          return lu;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/* ==============================
+   BUILD GRID WITH CLASSIFICATION
 ============================== */
 
 function buildGrid() {
@@ -129,22 +172,35 @@ function buildGrid() {
 
       let minDistance = Infinity;
 
-      for (let i = 0; i < locations.length; i++) {
-        const loc = locations[i];
+      for (let loc of locations) {
         const dist = haversine(centerLat, centerLng, loc.lat, loc.lng);
         if (dist < minDistance) minDistance = dist;
       }
 
-      if (minDistance > 1000) {
-        L.rectangle([
-          [lat, lng],
-          [lat + cellSize, lng + cellSize]
-        ], {
-          color: 'red',
-          weight: 0.2,
-          fillColor: 'red',
-          fillOpacity: 0.25
-        }).addTo(gapLayer);
+      if (minDistance > 1000 && uraFeatures.length > 0) {
+
+        const zone = classifyLanduse(centerLat, centerLng);
+
+        let color = null;
+
+        if (!zone) continue;
+
+        if (zone.includes("RESIDENTIAL")) color = "red";
+        else if (zone.includes("INDUSTRIAL")) color = "orange";
+        else if (zone.includes("MILITARY")) color = "black";
+        else if (zone.includes("WATERBODY")) continue;
+
+        if (color) {
+          L.rectangle([
+            [lat, lng],
+            [lat + cellSize, lng + cellSize]
+          ], {
+            color: color,
+            weight: 0.2,
+            fillColor: color,
+            fillOpacity: 0.35
+          }).addTo(gapLayer);
+        }
       }
     }
   }
@@ -152,16 +208,16 @@ function buildGrid() {
   map.addLayer(gapLayer);
 }
 
-setTimeout(buildGrid, 500);
+setTimeout(buildGrid, 1000);
 
 /* ==============================
-   LAYER CONTROLS
+   CONTROLS
 ============================== */
 
 L.control.layers(null, {
-  "Clinics (Clustered)": markerCluster,
+  "Clinics": markerCluster,
   "1km Buffers": bufferLayer,
-  "White-Space >1km": gapLayer
+  "Zoned White-Space": gapLayer
 }).addTo(map);
 
 /* ==============================
@@ -173,7 +229,9 @@ const legend = L.control({position: 'bottomright'});
 legend.onAdd = function () {
   const div = L.DomUtil.create('div', 'legend');
   div.innerHTML += '<b>Legend</b><br><br>';
-  div.innerHTML += '<i style="background:red"></i> White-Space >1km<br>';
+  div.innerHTML += '<i style="background:red"></i> Residential White-Space<br>';
+  div.innerHTML += '<i style="background:orange"></i> Industrial White-Space<br>';
+  div.innerHTML += '<i style="background:black"></i> Military<br>';
   div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition Radius<br>';
   return div;
 };
