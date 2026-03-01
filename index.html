@@ -23,30 +23,16 @@
 <script src="locations.js"></script>
 
 <script>
-
 const map = L.map('map').setView([1.3521, 103.8198], 11);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18
+  maxZoom: 18,
+  attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
 const markerCluster = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
 const gapLayer = L.layerGroup();
-
-let uraLanduse = null;
-
-/* Load URA Simplified Zoning */
-
-fetch('ura-landuse-simplified.geojson')
-  .then(res => res.json())
-  .then(data => {
-    uraLanduse = data.features;
-    console.log("URA zoning loaded:", uraLanduse.length, "features");
-  })
-  .catch(err => {
-    console.log("URA zoning failed:", err);
-  });
 
 /* Clinics + Buffers */
 
@@ -55,18 +41,20 @@ locations.forEach(location => {
   const marker = L.marker([location.lat, location.lng]);
   markerCluster.addLayer(marker);
 
-  L.circle([location.lat, location.lng], {
+  const buffer = L.circle([location.lat, location.lng], {
     radius: 1000,
     color: '#2b7bff',
     weight: 1,
     fillOpacity: 0.05
-  }).addTo(bufferLayer);
+  });
+
+  bufferLayer.addLayer(buffer);
 });
 
 map.addLayer(markerCluster);
 map.addLayer(bufferLayer);
 
-/* Haversine */
+/* Distance function */
 
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -83,7 +71,7 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* Grid (unchanged for now) */
+/* Build Gap Grid */
 
 function buildGrid() {
 
@@ -125,12 +113,12 @@ function buildGrid() {
   map.addLayer(gapLayer);
 }
 
-setTimeout(buildGrid, 1000);
+setTimeout(buildGrid, 500);
 
 L.control.layers(null, {
-  "Clinics": markerCluster,
-  "1km Competition Radius": bufferLayer,
-  "White-Space (>1km)": gapLayer
+  "Clinics (Clustered)": markerCluster,
+  "1km Buffers": bufferLayer,
+  "White-Space >1km": gapLayer
 }).addTo(map);
 
 </script>
