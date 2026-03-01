@@ -14,6 +14,23 @@
 <style>
   body { margin: 0; }
   #map { height: 100vh; }
+
+  .legend {
+    background: white;
+    padding: 10px;
+    line-height: 18px;
+    color: #333;
+    border-radius: 6px;
+    box-shadow: 0 0 6px rgba(0,0,0,0.2);
+  }
+
+  .legend i {
+    width: 14px;
+    height: 14px;
+    float: left;
+    margin-right: 8px;
+    opacity: 0.8;
+  }
 </style>
 </head>
 <body>
@@ -35,7 +52,7 @@ const bufferLayer = L.layerGroup();
 const gapLayer = L.layerGroup();
 
 /* ==============================
-   LOAD URA ZONING (NON-BLOCKING)
+   LOAD URA ZONING
 ============================== */
 
 let uraFeatures = [];
@@ -92,7 +109,7 @@ function haversine(lat1, lon1, lat2, lon2) {
 }
 
 /* ==============================
-   BUILD GAP GRID (UNCHANGED)
+   BUILD GAP GRID
 ============================== */
 
 function buildGrid() {
@@ -146,6 +163,22 @@ L.control.layers(null, {
   "1km Buffers": bufferLayer,
   "White-Space >1km": gapLayer
 }).addTo(map);
+
+/* ==============================
+   LEGEND
+============================== */
+
+const legend = L.control({position: 'bottomright'});
+
+legend.onAdd = function () {
+  const div = L.DomUtil.create('div', 'legend');
+  div.innerHTML += '<b>Legend</b><br><br>';
+  div.innerHTML += '<i style="background:red"></i> White-Space >1km<br>';
+  div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition Radius<br>';
+  return div;
+};
+
+legend.addTo(map);
 
 </script>
 
