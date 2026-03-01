@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>SG Vet Gap Analyzer</title>
+<title>SG Vet Strategic Map</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
@@ -12,25 +12,25 @@
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
 
 <style>
-  body { margin: 0; }
-  #map { height: 100vh; }
+body { margin: 0; }
+#map { height: 100vh; }
 
-  .legend {
-    background: white;
-    padding: 10px;
-    line-height: 18px;
-    border-radius: 6px;
-    box-shadow: 0 0 6px rgba(0,0,0,0.2);
-    font-size: 13px;
-  }
+.legend {
+  background: white;
+  padding: 10px;
+  line-height: 18px;
+  border-radius: 6px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.2);
+  font-size: 13px;
+}
 
-  .legend i {
-    width: 14px;
-    height: 14px;
-    float: left;
-    margin-right: 8px;
-    opacity: 0.8;
-  }
+.legend i {
+  width: 14px;
+  height: 14px;
+  float: left;
+  margin-right: 8px;
+  opacity: 0.85;
+}
 </style>
 </head>
 <body>
@@ -46,71 +46,29 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 18
 }).addTo(map);
 
-const markerCluster = L.markerClusterGroup();
+/* ============================
+   LAYERS
+============================ */
+
+const clinicLayer = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
 
-const residentialLayer = L.layerGroup();
 const industrialLayer = L.layerGroup();
-const militaryLayer = L.layerGroup();
-
-let uraFeatures = [];
-
-/* ============================
-   LOAD URA + PRECOMPUTE BBOX
-============================ */
-
-fetch('ura-landuse-simplified.geojson')
-  .then(res => res.json())
-  .then(data => {
-
-    uraFeatures = data.features.map(f => {
-
-      const geom = f.geometry;
-      let coords = [];
-
-      if (geom.type === "Polygon") {
-        coords = geom.coordinates[0];
-      } else if (geom.type === "MultiPolygon") {
-        coords = geom.coordinates[0][0];
-      }
-
-      let minLng = Infinity, maxLng = -Infinity;
-      let minLat = Infinity, maxLat = -Infinity;
-
-      coords.forEach(c => {
-        const lng = c[0];
-        const lat = c[1];
-
-        if (lng < minLng) minLng = lng;
-        if (lng > maxLng) maxLng = lng;
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-      });
-
-      return {
-        geometry: geom,
-        lu: f.properties.LU_DESC,
-        bbox: { minLat, maxLat, minLng, maxLng }
-      };
-    });
-
-    console.log("URA zoning loaded + optimized:", uraFeatures.length);
-
-    buildGrid();
-  });
+const restrictedLayer = L.layerGroup();
+const opportunityLayer = L.layerGroup();
 
 /* ============================
-   CLINICS + BUFFERS
+   LOAD CLINICS
 ============================ */
 
-locations.forEach(location => {
+locations.forEach(loc => {
 
-  markerCluster.addLayer(
-    L.marker([location.lat, location.lng])
+  clinicLayer.addLayer(
+    L.marker([loc.lat, loc.lng])
   );
 
   bufferLayer.addLayer(
-    L.circle([location.lat, location.lng], {
+    L.circle([loc.lat, loc.lng], {
       radius: 1000,
       color: '#2b7bff',
       weight: 1,
@@ -119,7 +77,7 @@ locations.forEach(location => {
   );
 });
 
-map.addLayer(markerCluster);
+map.addLayer(clinicLayer);
 map.addLayer(bufferLayer);
 
 /* ============================
@@ -163,36 +121,74 @@ function pointInPolygon(point, vs) {
 }
 
 /* ============================
-   CLASSIFY LANDUSE (OPTIMIZED)
+   LOAD URA + BUILD STRATEGY
 ============================ */
 
-function classifyLanduse(lat, lng) {
+let uraFeatures = [];
+
+fetch('ura-landuse-simplified.geojson')
+  .then(res => res.json())
+  .then(data => {
+
+    uraFeatures = data.features.map(f => {
+
+      const geom = f.geometry;
+      let coords = [];
+
+      if (geom.type === "Polygon") {
+        coords = geom.coordinates[0];
+      } else if (geom.type === "MultiPolygon") {
+        coords = geom.coordinates[0][0];
+      }
+
+      let minLng = Infinity, maxLng = -Infinity;
+      let minLat = Infinity, maxLat = -Infinity;
+
+      coords.forEach(c => {
+        const lng = c[0];
+        const lat = c[1];
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+      });
+
+      return {
+        geometry: geom,
+        lu: f.properties.LU_DESC.toUpperCase(),
+        bbox: { minLat, maxLat, minLng, maxLng }
+      };
+    });
+
+    buildStrategicGrid();
+  });
+
+/* ============================
+   CLASSIFY ZONE
+============================ */
+
+function classifyZone(lat, lng) {
 
   for (let feature of uraFeatures) {
 
     const b = feature.bbox;
 
-    // Fast bounding box rejection
     if (
       lat < b.minLat || lat > b.maxLat ||
       lng < b.minLng || lng > b.maxLng
-    ) {
-      continue;
-    }
+    ) continue;
 
     const geom = feature.geometry;
 
     if (geom.type === "Polygon") {
-      if (pointInPolygon([lng, lat], geom.coordinates[0])) {
+      if (pointInPolygon([lng, lat], geom.coordinates[0]))
         return feature.lu;
-      }
     }
 
     if (geom.type === "MultiPolygon") {
       for (let poly of geom.coordinates) {
-        if (pointInPolygon([lng, lat], poly[0])) {
+        if (pointInPolygon([lng, lat], poly[0]))
           return feature.lu;
-        }
       }
     }
   }
@@ -201,10 +197,10 @@ function classifyLanduse(lat, lng) {
 }
 
 /* ============================
-   BUILD GRID WITH ZONING
+   BUILD STRATEGIC GRID
 ============================ */
 
-function buildGrid() {
+function buildStrategicGrid() {
 
   const bounds = [
     [1.20, 103.60],
@@ -219,65 +215,77 @@ function buildGrid() {
       const centerLat = lat + cellSize/2;
       const centerLng = lng + cellSize/2;
 
-      let minDistance = Infinity;
+      const zone = classifyZone(centerLat, centerLng);
+      if (!zone) continue;
 
-      for (let loc of locations) {
-        const dist = haversine(centerLat, centerLng, loc.lat, loc.lng);
-        if (dist < minDistance) minDistance = dist;
+      // EXCLUSION LAYERS
+      if (
+        zone.includes("INDUSTRIAL")
+      ) {
+        drawCell(lat, lng, cellSize, "orange", industrialLayer);
+        continue;
       }
 
-      if (minDistance > 1000) {
+      if (
+        zone.includes("MILITARY") ||
+        zone.includes("SPECIAL") ||
+        zone.includes("UTILITY") ||
+        zone.includes("TRANSPORT") ||
+        zone.includes("PORT") ||
+        zone.includes("AIRPORT")
+      ) {
+        drawCell(lat, lng, cellSize, "#444", restrictedLayer);
+        continue;
+      }
 
-        const zone = classifyLanduse(centerLat, centerLng);
-        if (!zone) continue;
+      // OPPORTUNITY LOGIC
+      if (zone.includes("RESIDENTIAL")) {
 
-        let targetLayer = null;
-        let color = null;
+        let minDistance = Infinity;
 
-        if (zone.includes("RESIDENTIAL")) {
-          targetLayer = residentialLayer;
-          color = "green";
-        }
-        else if (zone.includes("INDUSTRIAL")) {
-          targetLayer = industrialLayer;
-          color = "orange";
-        }
-        else if (zone.includes("MILITARY")) {
-          targetLayer = militaryLayer;
-          color = "#444";
-        }
-        else {
-          continue;
+        for (let loc of locations) {
+          const dist = haversine(centerLat, centerLng, loc.lat, loc.lng);
+          if (dist < minDistance) minDistance = dist;
         }
 
-        L.rectangle([
-          [lat, lng],
-          [lat + cellSize, lng + cellSize]
-        ], {
-          color: color,
-          weight: 0.2,
-          fillColor: color,
-          fillOpacity: 0.35
-        }).addTo(targetLayer);
+        if (minDistance > 1000) {
+          drawCell(lat, lng, cellSize, "green", opportunityLayer);
+        }
       }
     }
   }
 
-  map.addLayer(residentialLayer);
   map.addLayer(industrialLayer);
-  map.addLayer(militaryLayer);
+  map.addLayer(restrictedLayer);
+  map.addLayer(opportunityLayer);
 }
 
 /* ============================
-   LAYER CONTROLS
+   DRAW CELL
+============================ */
+
+function drawCell(lat, lng, size, color, layer) {
+  L.rectangle(
+    [[lat, lng], [lat + size, lng + size]],
+    {
+      color: color,
+      weight: 0.2,
+      fillColor: color,
+      fillOpacity: 0.35
+    }
+  ).addTo(layer);
+}
+
+/* ============================
+   CONTROLS
 ============================ */
 
 L.control.layers(null, {
-  "Clinics": markerCluster,
+  "Clinics": clinicLayer,
   "1km Buffers": bufferLayer,
-  "Residential Opportunity": residentialLayer,
-  "Industrial (Low Demand)": industrialLayer,
-  "Military (Restricted)": militaryLayer
+  "Residential Opportunity": opportunityLayer,
+  "Industrial (Excluded)": industrialLayer,
+  "Restricted (Excluded)": restrictedLayer
 }).addTo(map);
 
 /* ============================
@@ -290,15 +298,14 @@ legend.onAdd = function () {
   const div = L.DomUtil.create('div', 'legend');
   div.innerHTML += '<b>Legend</b><br><br>';
   div.innerHTML += '<i style="background:green"></i> Residential Opportunity<br>';
-  div.innerHTML += '<i style="background:orange"></i> Industrial (Low Demand)<br>';
-  div.innerHTML += '<i style="background:#444"></i> Military (Restricted)<br>';
-  div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition Radius<br>';
+  div.innerHTML += '<i style="background:orange"></i> Industrial (Excluded)<br>';
+  div.innerHTML += '<i style="background:#444"></i> Restricted / Defence<br>';
+  div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition<br>';
   return div;
 };
 
 legend.addTo(map);
 
 </script>
-
 </body>
 </html>
