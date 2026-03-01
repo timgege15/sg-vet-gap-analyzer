@@ -14,20 +14,6 @@
 <style>
   body { margin: 0; }
   #map { height: 100vh; }
-
-  .popup-title {
-    font-weight: bold;
-    margin-bottom: 6px;
-  }
-
-  .clinic-entry {
-    margin-bottom: 8px;
-  }
-
-  .clinic-phone {
-    color: #2b7bff;
-    font-size: 13px;
-  }
 </style>
 </head>
 <body>
@@ -37,54 +23,114 @@
 <script src="locations.js"></script>
 
 <script>
+
 const map = L.map('map').setView([1.3521, 103.8198], 11);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18,
-  attribution: '&copy; OpenStreetMap contributors'
+  maxZoom: 18
 }).addTo(map);
 
 const markerCluster = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
+const gapLayer = L.layerGroup();
+
+let uraLanduse = null;
+
+/* Load URA Simplified Zoning */
+
+fetch('ura-landuse-simplified.geojson')
+  .then(res => res.json())
+  .then(data => {
+    uraLanduse = data.features;
+    console.log("URA zoning loaded:", uraLanduse.length, "features");
+  })
+  .catch(err => {
+    console.log("URA zoning failed:", err);
+  });
+
+/* Clinics + Buffers */
 
 locations.forEach(location => {
 
   const marker = L.marker([location.lat, location.lng]);
-
-  let popupContent = `
-    <div class="popup-title">${location.address}</div>
-  `;
-
-  location.clinics.forEach(clinic => {
-    popupContent += `
-      <div class="clinic-entry">
-        <b>${clinic.name}</b><br>
-        <span class="clinic-phone">📞 ${clinic.phone}</span>
-      </div>
-    `;
-  });
-
-  marker.bindPopup(popupContent);
-
   markerCluster.addLayer(marker);
 
-  // 1km buffer
-  const buffer = L.circle([location.lat, location.lng], {
+  L.circle([location.lat, location.lng], {
     radius: 1000,
     color: '#2b7bff',
     weight: 1,
-    fillColor: '#2b7bff',
     fillOpacity: 0.05
-  });
-
-  bufferLayer.addLayer(buffer);
+  }).addTo(bufferLayer);
 });
 
 map.addLayer(markerCluster);
+map.addLayer(bufferLayer);
+
+/* Haversine */
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = x => x * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(toRad(lat1)) *
+            Math.cos(toRad(lat2)) *
+            Math.sin(dLon/2)**2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+/* Grid (unchanged for now) */
+
+function buildGrid() {
+
+  const bounds = [
+    [1.20, 103.60],
+    [1.48, 104.05]
+  ];
+
+  const cellSize = 0.0035;
+
+  for (let lat = bounds[0][0]; lat <= bounds[1][0]; lat += cellSize) {
+    for (let lng = bounds[0][1]; lng <= bounds[1][1]; lng += cellSize) {
+
+      const centerLat = lat + cellSize/2;
+      const centerLng = lng + cellSize/2;
+
+      let minDistance = Infinity;
+
+      for (let i = 0; i < locations.length; i++) {
+        const loc = locations[i];
+        const dist = haversine(centerLat, centerLng, loc.lat, loc.lng);
+        if (dist < minDistance) minDistance = dist;
+      }
+
+      if (minDistance > 1000) {
+        L.rectangle([
+          [lat, lng],
+          [lat + cellSize, lng + cellSize]
+        ], {
+          color: 'red',
+          weight: 0.2,
+          fillColor: 'red',
+          fillOpacity: 0.25
+        }).addTo(gapLayer);
+      }
+    }
+  }
+
+  map.addLayer(gapLayer);
+}
+
+setTimeout(buildGrid, 1000);
 
 L.control.layers(null, {
-  "Clinics (Clustered)": markerCluster,
-  "1km Buffers": bufferLayer
+  "Clinics": markerCluster,
+  "1km Competition Radius": bufferLayer,
+  "White-Space (>1km)": gapLayer
 }).addTo(map);
 
 </script>
