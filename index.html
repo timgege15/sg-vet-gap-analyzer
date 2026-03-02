@@ -83,6 +83,22 @@ body { margin: 0; }
 .good { background:#d4edda; color:#155724; }
 .medium { background:#fff3cd; color:#856404; }
 .bad { background:#f8d7da; color:#721c24; }
+
+.legend {
+  background: white;
+  padding: 10px;
+  line-height: 18px;
+  border-radius: 6px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.2);
+  font-size: 13px;
+}
+.legend i {
+  width: 14px;
+  height: 14px;
+  float: left;
+  margin-right: 8px;
+  opacity: 0.85;
+}
 </style>
 </head>
 <body>
@@ -92,9 +108,9 @@ body { margin: 0; }
 <div class="radius-control">
   Competition Radius:
   <select id="radiusSelect">
-    <option value="1000">1km</option>
-    <option value="2000">2km</option>
-    <option value="3000">3km</option>
+    <option value="1">1km</option>
+    <option value="2">2km</option>
+    <option value="3">3km</option>
   </select>
 </div>
 
@@ -133,13 +149,12 @@ let currentGridLayer = null;
 
 document.getElementById("postalInput").focus();
 
-/* ===== RESTORE CLINIC POPUPS ===== */
+/* === Clinic Popups === */
 locations.forEach(loc => {
 
   const marker = L.marker([loc.lat, loc.lng]);
 
   let popup = `<b>${loc.address}</b><br><br>`;
-
   loc.clinics.forEach(c=>{
     popup += `<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
   });
@@ -150,41 +165,64 @@ locations.forEach(loc => {
 
 map.addLayer(clinicLayer);
 
-/* ===== GRID LOADING ===== */
+/* === Grid Loading === */
 function loadGrid(radiusKm){
+
   if(currentGridLayer) map.removeLayer(currentGridLayer);
 
   opportunityLayer.clearLayers();
   industrialLayer.clearLayers();
   restrictedLayer.clearLayers();
 
-  fetch(`grid-${radiusKm/1000}km.json`)
+  fetch(`grid-${radiusKm}km.json`)
   .then(res=>res.json())
   .then(grid=>{
     const cellSize=0.0035;
+
     grid.forEach(cell=>{
       let layer,color;
-      if(cell.type==="opportunity"){layer=opportunityLayer;color="green";}
-      else if(cell.type==="industrial"){layer=industrialLayer;color="orange";}
-      else if(cell.type==="restricted"){layer=restrictedLayer;color="#444";}
+
+      if(cell.type==="public_opportunity"){
+        layer=opportunityLayer;
+        color="#2ecc71";
+      }
+      else if(cell.type==="private_opportunity"){
+        layer=opportunityLayer;
+        color="#3498db";
+      }
+      else if(cell.type==="industrial"){
+        layer=industrialLayer;
+        color="orange";
+      }
+      else if(cell.type==="restricted"){
+        layer=restrictedLayer;
+        color="#444";
+      }
       else return;
 
-      L.rectangle([[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
-      {color,weight:0.2,fillColor:color,fillOpacity:0.35}).addTo(layer);
+      L.rectangle(
+        [[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
+        {color,weight:0.2,fillColor:color,fillOpacity:0.35}
+      ).addTo(layer);
     });
 
-    currentGridLayer=L.layerGroup([opportunityLayer,industrialLayer,restrictedLayer]);
+    currentGridLayer=L.layerGroup([
+      opportunityLayer,
+      industrialLayer,
+      restrictedLayer
+    ]);
+
     map.addLayer(currentGridLayer);
   });
 }
 
-loadGrid(1000);
+loadGrid(1);
 
 document.getElementById("radiusSelect").addEventListener("change",function(){
   loadGrid(parseInt(this.value));
 });
 
-/* ===== DISTANCE ===== */
+/* === Distance === */
 function haversine(lat1,lon1,lat2,lon2){
   const R=6371000;
   const toRad=x=>x*Math.PI/180;
@@ -195,12 +233,12 @@ function haversine(lat1,lon1,lat2,lon2){
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
-/* ===== PANEL ===== */
+/* === Panel Toggle === */
 function togglePanel(){
   document.getElementById("resultsPanel").classList.toggle("hidden");
 }
 
-/* ===== SEARCH ===== */
+/* === Search === */
 function handleSearch(e){
   e.preventDefault();
   searchPostal();
@@ -237,7 +275,7 @@ function searchPostal(){
 
 function evaluateSite(lat,lng){
 
-  const radius=parseInt(document.getElementById("radiusSelect").value);
+  const radius=parseInt(document.getElementById("radiusSelect").value)*1000;
 
   let distances=[];
   locations.forEach(loc=>{
@@ -278,13 +316,26 @@ function evaluateSite(lat,lng){
   document.getElementById("resultsContent").innerHTML=html;
 }
 
-/* ===== LAYER CONTROL ===== */
+/* === Layer Control === */
 L.control.layers(null,{
   "Clinics":clinicLayer,
-  "Residential Opportunity":opportunityLayer,
+  "Public (HDB) Opportunity":opportunityLayer,
   "Industrial / Business":industrialLayer,
   "Restricted / Defence":restrictedLayer
 }).addTo(map);
+
+/* === Legend === */
+const legend=L.control({position:'bottomright'});
+legend.onAdd=function(){
+  const div=L.DomUtil.create('div','legend');
+  div.innerHTML+="<b>Legend</b><br><br>";
+  div.innerHTML+='<i style="background:#2ecc71"></i> Public (HDB) Opportunity<br>';
+  div.innerHTML+='<i style="background:#3498db"></i> Private Opportunity<br>';
+  div.innerHTML+='<i style="background:orange"></i> Industrial / Business<br>';
+  div.innerHTML+='<i style="background:#444"></i> Restricted / Defence<br>';
+  return div;
+};
+legend.addTo(map);
 
 </script>
 </body>
