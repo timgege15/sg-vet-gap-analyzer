@@ -121,7 +121,7 @@ function pointInPolygon(point, vs) {
 }
 
 /* ============================
-   LOAD URA + BUILD GRID
+   LOAD URA + PRINT UNIQUE ZONES
 ============================ */
 
 let uraFeatures = [];
@@ -161,9 +161,10 @@ fetch('ura-landuse-simplified.geojson')
     });
 
     console.log("URA loaded:", uraFeatures.length);
-    console.log("Sample LU_DESC:",
-      uraFeatures.slice(0,20).map(f => f.lu)
-    );
+
+    // PRINT ALL UNIQUE ZONES
+    const uniqueZones = [...new Set(uraFeatures.map(f => f.lu))];
+    console.log("ALL UNIQUE LU_DESC VALUES:", uniqueZones);
 
     buildStrategicGrid();
   });
@@ -202,7 +203,7 @@ function classifyZone(lat, lng) {
 }
 
 /* ============================
-   BUILD STRATEGIC GRID
+   BUILD GRID
 ============================ */
 
 function buildStrategicGrid() {
@@ -223,31 +224,6 @@ function buildStrategicGrid() {
       const zone = classifyZone(centerLat, centerLng);
       if (!zone) continue;
 
-      // INDUSTRIAL / BUSINESS
-      if (
-        zone.includes("INDUSTRIAL") ||
-        zone.includes("BUSINESS") ||
-        zone.includes("WHITE")
-      ) {
-        drawCell(lat, lng, cellSize, "orange", industrialLayer);
-        continue;
-      }
-
-      // RESTRICTED / DEFENCE / SPECIAL
-      if (
-        zone.includes("MILITARY") ||
-        zone.includes("DEFENCE") ||
-        zone.includes("SPECIAL") ||
-        zone.includes("UTILITY") ||
-        zone.includes("TRANSPORT") ||
-        zone.includes("PORT") ||
-        zone.includes("AIRPORT")
-      ) {
-        drawCell(lat, lng, cellSize, "#444", restrictedLayer);
-        continue;
-      }
-
-      // RESIDENTIAL OPPORTUNITY
       if (zone.includes("RESIDENTIAL")) {
 
         let minDistance = Infinity;
@@ -264,8 +240,6 @@ function buildStrategicGrid() {
     }
   }
 
-  map.addLayer(industrialLayer);
-  map.addLayer(restrictedLayer);
   map.addLayer(opportunityLayer);
 }
 
@@ -292,9 +266,7 @@ function drawCell(lat, lng, size, color, layer) {
 L.control.layers(null, {
   "Clinics": clinicLayer,
   "1km Buffers": bufferLayer,
-  "Residential Opportunity": opportunityLayer,
-  "Industrial / Business (Excluded)": industrialLayer,
-  "Restricted / Defence (Excluded)": restrictedLayer
+  "Residential Opportunity": opportunityLayer
 }).addTo(map);
 
 /* ============================
@@ -307,8 +279,6 @@ legend.onAdd = function () {
   const div = L.DomUtil.create('div', 'legend');
   div.innerHTML += '<b>Legend</b><br><br>';
   div.innerHTML += '<i style="background:green"></i> Residential Opportunity<br>';
-  div.innerHTML += '<i style="background:orange"></i> Industrial / Business<br>';
-  div.innerHTML += '<i style="background:#444"></i> Restricted / Defence<br>';
   div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition<br>';
   return div;
 };
