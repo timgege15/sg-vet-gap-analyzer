@@ -46,16 +46,9 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 18
 }).addTo(map);
 
-/* ============================
-   LAYERS
-============================ */
-
 const clinicLayer = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
-
-const industrialLayer = L.layerGroup();
-const restrictedLayer = L.layerGroup();
-const opportunityLayer = L.layerGroup();
+const gridLayer = L.layerGroup();
 
 /* ============================
    LOAD CLINICS
@@ -81,204 +74,43 @@ map.addLayer(clinicLayer);
 map.addLayer(bufferLayer);
 
 /* ============================
-   DISTANCE FUNCTION
+   LOAD PRECOMPUTED GRID
 ============================ */
 
-function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = x => x * Math.PI / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-
-  const a = Math.sin(dLat/2)**2 +
-            Math.cos(toRad(lat1)) *
-            Math.cos(toRad(lat2)) *
-            Math.sin(dLon/2)**2;
-
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
-/* ============================
-   POINT IN POLYGON
-============================ */
-
-function pointInPolygon(point, vs) {
-  let x = point[0], y = point[1];
-  let inside = false;
-
-  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-    let xi = vs[i][0], yi = vs[i][1];
-    let xj = vs[j][0], yj = vs[j][1];
-
-    let intersect = ((yi > y) != (yj > y)) &&
-      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-
-    if (intersect) inside = !inside;
-  }
-
-  return inside;
-}
-
-/* ============================
-   LOAD ZONING SUBSET
-============================ */
-
-let uraFeatures = [];
-
-fetch('ura-zoning-subset.geojson')
+fetch('grid-precomputed.json')
   .then(res => res.json())
-  .then(data => {
+  .then(grid => {
 
-    uraFeatures = data.features.map(f => {
+    const cellSize = 0.0035;
 
-      const geom = f.geometry;
-      let coords = [];
+    grid.forEach(cell => {
 
-      if (geom.type === "Polygon") {
-        coords = geom.coordinates[0];
-      } else if (geom.type === "MultiPolygon") {
-        coords = geom.coordinates[0][0];
+      let color;
+
+      if (cell.type === "industrial") {
+        color = "orange";
+      } else if (cell.type === "restricted") {
+        color = "#444";
+      } else if (cell.type === "opportunity") {
+        color = "green";
+      } else {
+        return;
       }
 
-      let minLng = Infinity, maxLng = -Infinity;
-      let minLat = Infinity, maxLat = -Infinity;
-
-      coords.forEach(c => {
-        const lng = c[0];
-        const lat = c[1];
-        if (lng < minLng) minLng = lng;
-        if (lng > maxLng) maxLng = lng;
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-      });
-
-      return {
-        geometry: geom,
-        lu: f.properties.LU_DESC.toUpperCase(),
-        bbox: { minLat, maxLat, minLng, maxLng }
-      };
+      L.rectangle(
+        [[cell.lat, cell.lng],
+         [cell.lat + cellSize, cell.lng + cellSize]],
+        {
+          color: color,
+          weight: 0.2,
+          fillColor: color,
+          fillOpacity: 0.35
+        }
+      ).addTo(gridLayer);
     });
 
-    buildStrategicGrid();
+    map.addLayer(gridLayer);
   });
-
-/* ============================
-   CLASSIFY ZONE
-============================ */
-
-function classifyZone(lat, lng) {
-
-  for (let feature of uraFeatures) {
-
-    const b = feature.bbox;
-
-    if (
-      lat < b.minLat || lat > b.maxLat ||
-      lng < b.minLng || lng > b.maxLng
-    ) continue;
-
-    const geom = feature.geometry;
-
-    if (geom.type === "Polygon") {
-      if (pointInPolygon([lng, lat], geom.coordinates[0]))
-        return feature.lu;
-    }
-
-    if (geom.type === "MultiPolygon") {
-      for (let poly of geom.coordinates) {
-        if (pointInPolygon([lng, lat], poly[0]))
-          return feature.lu;
-      }
-    }
-  }
-
-  return null;
-}
-
-/* ============================
-   BUILD STRATEGIC GRID
-============================ */
-
-function buildStrategicGrid() {
-
-  const bounds = [
-    [1.20, 103.60],
-    [1.48, 104.05]
-  ];
-
-  const cellSize = 0.0035;
-
-  for (let lat = bounds[0][0]; lat <= bounds[1][0]; lat += cellSize) {
-    for (let lng = bounds[0][1]; lng <= bounds[1][1]; lng += cellSize) {
-
-      const centerLat = lat + cellSize/2;
-      const centerLng = lng + cellSize/2;
-
-      const zone = classifyZone(centerLat, centerLng);
-      if (!zone) continue;
-
-      // INDUSTRIAL / BUSINESS
-      if (
-        zone.includes("INDUSTRIAL") ||
-        zone.includes("BUSINESS") ||
-        zone.includes("WHITE")
-      ) {
-        drawCell(lat, lng, cellSize, "orange", industrialLayer);
-        continue;
-      }
-
-      // RESTRICTED
-      if (
-        zone.includes("MILITARY") ||
-        zone.includes("DEFENCE") ||
-        zone.includes("SPECIAL") ||
-        zone.includes("UTILITY") ||
-        zone.includes("TRANSPORT") ||
-        zone.includes("PORT") ||
-        zone.includes("AIRPORT")
-      ) {
-        drawCell(lat, lng, cellSize, "#444", restrictedLayer);
-        continue;
-      }
-
-      // RESIDENTIAL OPPORTUNITY
-      if (zone.includes("RESIDENTIAL")) {
-
-        let minDistance = Infinity;
-
-        for (let loc of locations) {
-          const dist = haversine(centerLat, centerLng, loc.lat, loc.lng);
-          if (dist < minDistance) minDistance = dist;
-        }
-
-        if (minDistance > 1000) {
-          drawCell(lat, lng, cellSize, "green", opportunityLayer);
-        }
-      }
-    }
-  }
-
-  map.addLayer(industrialLayer);
-  map.addLayer(restrictedLayer);
-  map.addLayer(opportunityLayer);
-}
-
-/* ============================
-   DRAW CELL
-============================ */
-
-function drawCell(lat, lng, size, color, layer) {
-  L.rectangle(
-    [[lat, lng], [lat + size, lng + size]],
-    {
-      color: color,
-      weight: 0.2,
-      fillColor: color,
-      fillOpacity: 0.35
-    }
-  ).addTo(layer);
-}
 
 /* ============================
    CONTROLS
@@ -287,9 +119,7 @@ function drawCell(lat, lng, size, color, layer) {
 L.control.layers(null, {
   "Clinics": clinicLayer,
   "1km Buffers": bufferLayer,
-  "Residential Opportunity": opportunityLayer,
-  "Industrial / Business (Excluded)": industrialLayer,
-  "Restricted / Defence (Excluded)": restrictedLayer
+  "Strategic Zoning Grid": gridLayer
 }).addTo(map);
 
 /* ============================
