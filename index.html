@@ -15,7 +15,7 @@
 body { margin: 0; }
 #map { height: 100vh; }
 
-/* Radius Control */
+/* Radius */
 .radius-control {
   position: absolute;
   top: 85px;
@@ -28,7 +28,7 @@ body { margin: 0; }
   font-size: 13px;
 }
 
-/* Postal Search */
+/* Search */
 .search-control {
   position: absolute;
   top: 155px;
@@ -41,19 +41,18 @@ body { margin: 0; }
   font-size: 13px;
 }
 
-/* Side Panel */
+/* Panel */
 .side-panel {
   position: absolute;
   top: 0;
   right: 0;
-  width: 300px;
+  width: 320px;
   height: 100%;
   background: white;
   z-index: 1500;
   padding: 15px;
   box-shadow: -2px 0 6px rgba(0,0,0,0.2);
   overflow-y: auto;
-  font-size: 14px;
   transition: transform 0.3s ease;
 }
 
@@ -71,15 +70,6 @@ body { margin: 0; }
   cursor: pointer;
   font-weight: bold;
   font-size: 18px;
-}
-
-.legend {
-  background: white;
-  padding: 10px;
-  line-height: 18px;
-  border-radius: 6px;
-  box-shadow: 0 0 6px rgba(0,0,0,0.2);
-  font-size: 13px;
 }
 </style>
 </head>
@@ -122,13 +112,74 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 const clinicLayer = L.markerClusterGroup();
-let siteMarker = null;
-let lineLayer = L.layerGroup().addTo(map);
+const opportunityLayer = L.layerGroup();
+const industrialLayer = L.layerGroup();
+const restrictedLayer = L.layerGroup();
+const lineLayer = L.layerGroup().addTo(map);
 
+let siteMarker = null;
+let currentGridLayer = null;
+
+/* Load Clinics */
 locations.forEach(loc => {
   clinicLayer.addLayer(L.marker([loc.lat, loc.lng]));
 });
 map.addLayer(clinicLayer);
+
+/* Load Grid */
+function loadGrid(radiusKm) {
+
+  if (currentGridLayer) map.removeLayer(currentGridLayer);
+
+  opportunityLayer.clearLayers();
+  industrialLayer.clearLayers();
+  restrictedLayer.clearLayers();
+
+  fetch(`grid-${radiusKm}km.json`)
+    .then(res => res.json())
+    .then(grid => {
+
+      const cellSize = 0.0035;
+
+      grid.forEach(cell => {
+
+        let layer;
+        let color;
+
+        if (cell.type === "opportunity") {
+          layer = opportunityLayer;
+          color = "green";
+        } else if (cell.type === "industrial") {
+          layer = industrialLayer;
+          color = "orange";
+        } else if (cell.type === "restricted") {
+          layer = restrictedLayer;
+          color = "#444";
+        } else return;
+
+        L.rectangle(
+          [[cell.lat, cell.lng],
+           [cell.lat + cellSize, cell.lng + cellSize]],
+          {color: color, weight: 0.2, fillColor: color, fillOpacity: 0.35}
+        ).addTo(layer);
+      });
+
+      currentGridLayer = L.layerGroup([
+        opportunityLayer,
+        industrialLayer,
+        restrictedLayer
+      ]);
+
+      map.addLayer(currentGridLayer);
+    });
+}
+
+loadGrid(1);
+
+document.getElementById("radiusSelect")
+  .addEventListener("change", function() {
+    loadGrid(this.value);
+  });
 
 /* Distance */
 function haversine(lat1, lon1, lat2, lon2) {
@@ -143,12 +194,12 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* Toggle Panel */
+/* Panel Toggle */
 function togglePanel() {
   document.getElementById("resultsPanel").classList.toggle("hidden");
 }
 
-/* Search */
+/* Postal Search */
 function searchPostal() {
 
   const postal = document.getElementById("postalInput").value.trim();
@@ -201,9 +252,7 @@ function evaluateSite(lat, lng) {
     const distText = d < 1000 ? `${Math.round(d)} m`
                               : `${(d/1000).toFixed(2)} km`;
 
-    const clinicNames = item.location.clinics.map(c => c.name).join(", ");
-
-    html += `<p><b>${index+1}. ${clinicNames}</b><br>
+    html += `<p><b>${index+1}. ${item.location.clinics.map(c=>c.name).join(", ")}</b><br>
              Distance: ${distText}<br>
              Address: ${item.location.address}</p>`;
 
@@ -215,6 +264,15 @@ function evaluateSite(lat, lng) {
 
   document.getElementById("resultsContent").innerHTML = html;
 }
+
+/* Layer Control (RESTORED) */
+L.control.layers(null, {
+  "Clinics": clinicLayer,
+  "Residential Opportunity": opportunityLayer,
+  "Industrial / Business": industrialLayer,
+  "Restricted / Defence": restrictedLayer
+}).addTo(map);
+
 </script>
 </body>
 </html>
