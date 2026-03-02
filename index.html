@@ -39,38 +39,40 @@ body { margin:0; }
 
 <script>
 
+/* ================= MAP INIT ================= */
+
 const map = L.map('map').setView([1.3521,103.8198],11);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   maxZoom:18
 }).addTo(map);
 
-/* -------------------- CLINICS -------------------- */
+
+/* ================= CLINICS ================= */
 
 const clinicLayer = L.markerClusterGroup();
 
 locations.forEach(loc=>{
   const marker = L.marker([loc.lat,loc.lng]);
+
   let popup = `<b>${loc.address}</b><br><br>`;
   loc.clinics.forEach(c=>{
     popup += `<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
   });
+
   marker.bindPopup(popup);
   clinicLayer.addLayer(marker);
 });
 
 map.addLayer(clinicLayer);
 
-/* -------------------- OPPORTUNITY GRID -------------------- */
+
+/* ================= OPPORTUNITY GRID ================= */
 
 const opportunityLayer = L.layerGroup();
-let currentGridLayer = null;
+const cellSize = 0.0035;
 
 function loadGrid(radiusKm){
-
-  if(currentGridLayer){
-    map.removeLayer(currentGridLayer);
-  }
 
   opportunityLayer.clearLayers();
 
@@ -78,27 +80,35 @@ function loadGrid(radiusKm){
   .then(res=>res.json())
   .then(grid=>{
 
-    const cellSize = 0.0035;
-
     grid.forEach(cell=>{
-      let color = cell.type==="public_opportunity"
+
+      let color =
+        cell.type === "public_opportunity"
         ? "#2ecc71"
         : "#3498db";
 
       L.rectangle(
-        [[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
-        {color,weight:0.2,fillColor:color,fillOpacity:0.35}
+        [[cell.lat,cell.lng],
+         [cell.lat+cellSize,cell.lng+cellSize]],
+        {
+          color:color,
+          weight:0.2,
+          fillColor:color,
+          fillOpacity:0.35
+        }
       ).addTo(opportunityLayer);
+
     });
 
-    currentGridLayer = opportunityLayer;
-    map.addLayer(opportunityLayer);
   });
+
 }
 
 loadGrid(1);
+map.addLayer(opportunityLayer);
 
-/* -------------------- INDUSTRIAL LAYER -------------------- */
+
+/* ================= INDUSTRIAL ================= */
 
 const industrialLayer = L.geoJSON(null,{
   style:{
@@ -112,9 +122,11 @@ fetch("industrial-zones.json?v="+Date.now())
   .then(res=>res.json())
   .then(data=>{
     industrialLayer.addData(data);
+    map.addLayer(industrialLayer);   // ON by default
   });
 
-/* -------------------- RESTRICTED LAYER -------------------- */
+
+/* ================= RESTRICTED ================= */
 
 const restrictedLayer = L.geoJSON(null,{
   style:{
@@ -128,9 +140,11 @@ fetch("restricted-zones.json?v="+Date.now())
   .then(res=>res.json())
   .then(data=>{
     restrictedLayer.addData(data);
+    map.addLayer(restrictedLayer);   // ON by default
   });
 
-/* -------------------- LAYER CONTROL -------------------- */
+
+/* ================= LAYER CONTROL ================= */
 
 L.control.layers(null,{
   "Clinics": clinicLayer,
@@ -139,7 +153,8 @@ L.control.layers(null,{
   "Restricted": restrictedLayer
 }).addTo(map);
 
-/* -------------------- LEGEND -------------------- */
+
+/* ================= LEGEND ================= */
 
 const legend = L.control({position:'bottomright'});
 
