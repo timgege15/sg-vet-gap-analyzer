@@ -15,6 +15,18 @@
 body { margin: 0; }
 #map { height: 100vh; }
 
+.control-box {
+  position: absolute;
+  top: 10px;
+  left: 50px;
+  z-index: 1000;
+  background: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.2);
+  font-size: 14px;
+}
+
 .legend {
   background: white;
   padding: 10px;
@@ -37,6 +49,15 @@ body { margin: 0; }
 
 <div id="map"></div>
 
+<div class="control-box">
+  Competition Radius:
+  <select id="radiusSelect">
+    <option value="1">1km</option>
+    <option value="2">2km</option>
+    <option value="3">3km</option>
+  </select>
+</div>
+
 <script src="locations.js"></script>
 
 <script>
@@ -53,16 +74,12 @@ const opportunityLayer = L.layerGroup();
 const industrialLayer = L.layerGroup();
 const restrictedLayer = L.layerGroup();
 
-/* ============================
-   LOAD CLINICS
-============================ */
+let currentGridLayer = null;
+
+/* Load Clinics */
 
 locations.forEach(loc => {
-
-  clinicLayer.addLayer(
-    L.marker([loc.lat, loc.lng])
-  );
-
+  clinicLayer.addLayer(L.marker([loc.lat, loc.lng]));
   bufferLayer.addLayer(
     L.circle([loc.lat, loc.lng], {
       radius: 1000,
@@ -76,54 +93,74 @@ locations.forEach(loc => {
 map.addLayer(clinicLayer);
 map.addLayer(bufferLayer);
 
-/* ============================
-   LOAD PRECOMPUTED GRID
-============================ */
+/* Load Grid */
 
-fetch('grid-precomputed.json')
-  .then(res => res.json())
-  .then(grid => {
+function loadGrid(radiusKm) {
 
-    const cellSize = 0.0035;
+  if (currentGridLayer) {
+    map.removeLayer(currentGridLayer);
+  }
 
-    grid.forEach(cell => {
+  opportunityLayer.clearLayers();
+  industrialLayer.clearLayers();
+  restrictedLayer.clearLayers();
 
-      let layer;
-      let color;
+  fetch(`grid-${radiusKm}km.json`)
+    .then(res => res.json())
+    .then(grid => {
 
-      if (cell.type === "opportunity") {
-        layer = opportunityLayer;
-        color = "green";
-      } else if (cell.type === "industrial") {
-        layer = industrialLayer;
-        color = "orange";
-      } else if (cell.type === "restricted") {
-        layer = restrictedLayer;
-        color = "#444";
-      } else {
-        return;
-      }
+      const cellSize = 0.0035;
 
-      L.rectangle(
-        [[cell.lat, cell.lng],
-         [cell.lat + cellSize, cell.lng + cellSize]],
-        {
-          color: color,
-          weight: 0.2,
-          fillColor: color,
-          fillOpacity: 0.35
+      grid.forEach(cell => {
+
+        let layer;
+        let color;
+
+        if (cell.type === "opportunity") {
+          layer = opportunityLayer;
+          color = "green";
+        } else if (cell.type === "industrial") {
+          layer = industrialLayer;
+          color = "orange";
+        } else if (cell.type === "restricted") {
+          layer = restrictedLayer;
+          color = "#444";
+        } else {
+          return;
         }
-      ).addTo(layer);
-    });
 
-    map.addLayer(opportunityLayer);
-    map.addLayer(industrialLayer);
-    map.addLayer(restrictedLayer);
+        L.rectangle(
+          [[cell.lat, cell.lng],
+           [cell.lat + cellSize, cell.lng + cellSize]],
+          {
+            color: color,
+            weight: 0.2,
+            fillColor: color,
+            fillOpacity: 0.35
+          }
+        ).addTo(layer);
+      });
+
+      currentGridLayer = L.layerGroup([
+        opportunityLayer,
+        industrialLayer,
+        restrictedLayer
+      ]);
+
+      map.addLayer(currentGridLayer);
+    });
+}
+
+/* Initial Load */
+loadGrid(1);
+
+/* Dropdown Event */
+document.getElementById("radiusSelect")
+  .addEventListener("change", function() {
+    loadGrid(this.value);
   });
 
-/* ============================
-   CONTROLS
-============================ */
+/* Controls */
 
 L.control.layers(null, {
   "Clinics": clinicLayer,
@@ -133,9 +170,7 @@ L.control.layers(null, {
   "Restricted / Defence (Excluded)": restrictedLayer
 }).addTo(map);
 
-/* ============================
-   LEGEND
-============================ */
+/* Legend */
 
 const legend = L.control({position: 'bottomright'});
 
@@ -145,7 +180,7 @@ legend.onAdd = function () {
   div.innerHTML += '<i style="background:green"></i> Residential Opportunity<br>';
   div.innerHTML += '<i style="background:orange"></i> Industrial / Business<br>';
   div.innerHTML += '<i style="background:#444"></i> Restricted / Defence<br>';
-  div.innerHTML += '<i style="background:#2b7bff"></i> 1km Competition<br>';
+  div.innerHTML += '<i style="background:#2b7bff"></i> Clinic Location<br>';
   return div;
 };
 
