@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <title>SG Vet Gap Analyzer</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
@@ -15,9 +15,10 @@
 body { margin:0; }
 #map { height:100vh; }
 
+/* Competition Controls */
 .control-box {
   position:absolute;
-  top:10px;
+  top:60px;   /* push below zoom */
   left:10px;
   background:white;
   padding:12px;
@@ -25,12 +26,45 @@ body { margin:0; }
   box-shadow:0 2px 6px rgba(0,0,0,0.2);
   z-index:1000;
   font-size:14px;
+  width:200px;
 }
 
 .control-box select,
 .control-box input {
-  margin-top:6px;
   width:100%;
+  margin-top:6px;
+}
+
+/* Side Panel */
+#sidePanel {
+  position:absolute;
+  top:0;
+  right:0;
+  width:320px;
+  height:100%;
+  background:white;
+  box-shadow:-2px 0 6px rgba(0,0,0,0.2);
+  padding:15px;
+  overflow:auto;
+  transform:translateX(100%);
+  transition:0.3s;
+  z-index:1200;
+}
+
+#sidePanel.open {
+  transform:translateX(0);
+}
+
+#togglePanel {
+  position:absolute;
+  top:10px;
+  right:10px;
+  background:white;
+  padding:6px 10px;
+  border-radius:6px;
+  cursor:pointer;
+  box-shadow:0 2px 6px rgba(0,0,0,0.2);
+  z-index:1300;
 }
 </style>
 </head>
@@ -39,18 +73,27 @@ body { margin:0; }
 <div id="map"></div>
 
 <div class="control-box">
-  <label><b>Competition Radius</b></label>
+  <b>Competition Radius</b>
   <select id="radiusSelect">
     <option value="1">1 km</option>
     <option value="2">2 km</option>
     <option value="3">3 km</option>
   </select>
 
-  <label><b>Max Clinics</b></label>
-  <input type="number" id="maxClinics" value="1" min="0" max="10">
+  <b>Max Clinics</b>
+  <input type="number" id="maxClinics" value="1" min="0">
 
-  <label><b>Min Residential %</b></label>
+  <b>Min Residential %</b>
   <input type="number" id="minRes" value="40" min="0" max="100">
+</div>
+
+<div id="togglePanel">Site Evaluation</div>
+
+<div id="sidePanel">
+  <h3>Postal Search</h3>
+  <input type="text" id="postalInput" placeholder="Enter 6-digit postal"/>
+  <button onclick="searchPostal()">Search</button>
+  <div id="result"></div>
 </div>
 
 <script src="locations.js"></script>
@@ -63,60 +106,135 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   attribution:'© OpenStreetMap'
 }).addTo(map);
 
-const gridLayers = {
-  1: [],
-  2: [],
-  3: []
-};
+/* ---------------- Clinic Markers ---------------- */
 
-let activeLayer = L.layerGroup().addTo(map);
+const clinicCluster = L.markerClusterGroup();
+const bufferLayer = L.layerGroup();
 
-function loadAllGrids() {
-  return Promise.all([
-    fetch('grid-1km.json').then(r=>r.json()),
-    fetch('grid-2km.json').then(r=>r.json()),
-    fetch('grid-3km.json').then(r=>r.json())
-  ]).then(([g1,g2,g3])=>{
-    gridLayers[1] = g1;
-    gridLayers[2] = g2;
-    gridLayers[3] = g3;
+locations.forEach(loc=>{
+  const marker = L.marker([loc.lat, loc.lng]);
+
+  let popup = `<b>${loc.address}</b><br>`;
+  loc.clinics.forEach(c=>{
+    popup += `${c.name}<br>${c.phone}<br><br>`;
   });
-}
 
-function renderGrid() {
-  activeLayer.clearLayers();
+  marker.bindPopup(popup);
+  clinicCluster.addLayer(marker);
 
-  const radius = document.getElementById('radiusSelect').value;
-  const maxClinics = parseInt(document.getElementById('maxClinics').value);
-  const minRes = parseFloat(document.getElementById('minRes').value) / 100;
+  const circle = L.circle([loc.lat, loc.lng],{
+    radius:1000,
+    color:'blue',
+    weight:1,
+    fillOpacity:0.05
+  });
 
-  const cells = gridLayers[radius];
+  bufferLayer.addLayer(circle);
+});
 
-  cells.forEach(cell=>{
+map.addLayer(clinicCluster);
+
+/* ---------------- Grid Layers ---------------- */
+
+let grids = {};
+let activeGridLayer = L.layerGroup().addTo(map);
+
+Promise.all([
+  fetch('grid-1km.json').then(r=>r.json()),
+  fetch('grid-2km.json').then(r=>r.json()),
+  fetch('grid-3km.json').then(r=>r.json())
+]).then(([g1,g2,g3])=>{
+  grids[1]=g1;
+  grids[2]=g2;
+  grids[3]=g3;
+  renderGrid();
+});
+
+function renderGrid(){
+  activeGridLayer.clearLayers();
+
+  const r = document.getElementById('radiusSelect').value;
+  const maxC = parseInt(document.getElementById('maxClinics').value);
+  const minRes = parseFloat(document.getElementById('minRes').value)/100;
+
+  grids[r].forEach(cell=>{
     if(cell.dominant_type !== "residential") return;
-    if(cell.clinic_count > maxClinics) return;
+    if(cell.clinic_count > maxC) return;
     if(cell.residential_pct < minRes) return;
 
-    const rect = L.rectangle([
+    L.rectangle([
       [cell.lat, cell.lng],
       [cell.lat+0.0035, cell.lng+0.0035]
     ],{
       color:'green',
       weight:0.3,
       fillOpacity:0.4
-    });
-
-    activeLayer.addLayer(rect);
+    }).addTo(activeGridLayer);
   });
 }
 
-document.getElementById('radiusSelect').addEventListener('change', renderGrid);
-document.getElementById('maxClinics').addEventListener('input', renderGrid);
-document.getElementById('minRes').addEventListener('input', renderGrid);
+document.getElementById('radiusSelect').addEventListener('change',renderGrid);
+document.getElementById('maxClinics').addEventListener('input',renderGrid);
+document.getElementById('minRes').addEventListener('input',renderGrid);
 
-loadAllGrids().then(()=>{
-  renderGrid();
-});
+/* ---------------- Postal Search ---------------- */
+
+function haversine(a,b,c,d){
+  const R=6371000;
+  const toRad=x=>x*Math.PI/180;
+  const dLat=toRad(c-a);
+  const dLon=toRad(d-b);
+  const x=Math.sin(dLat/2)**2+
+    Math.cos(toRad(a))*Math.cos(toRad(c))*
+    Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+function searchPostal(){
+  const postal=document.getElementById('postalInput').value;
+  fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
+  .then(r=>r.json())
+  .then(data=>{
+    if(!data.results.length) return;
+
+    const lat=parseFloat(data.results[0].LATITUDE);
+    const lng=parseFloat(data.results[0].LONGITUDE);
+
+    map.setView([lat,lng],15);
+    L.marker([lat,lng]).addTo(map);
+
+    let distances=locations.map(loc=>{
+      return {
+        ...loc,
+        dist:haversine(lat,lng,loc.lat,loc.lng)
+      };
+    });
+
+    distances.sort((a,b)=>a.dist-b.dist);
+
+    let html="<h4>Nearest Clinics</h4>";
+    distances.slice(0,3).forEach(d=>{
+      html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
+    });
+
+    document.getElementById('result').innerHTML=html;
+  });
+}
+
+/* ---------------- Panel Toggle ---------------- */
+
+document.getElementById('togglePanel').onclick=function(){
+  document.getElementById('sidePanel').classList.toggle('open');
+};
+
+/* ---------------- Layer Control ---------------- */
+
+L.control.layers(null,{
+  "Clinics":clinicCluster,
+  "1km Buffers":bufferLayer,
+  "Opportunity Grid":activeGridLayer
+}).addTo(map);
+
 </script>
 
 </body>
