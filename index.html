@@ -15,29 +15,32 @@
 body { margin:0; }
 #map { height:100vh; }
 
-/* Search Box */
+/* Search + Radius */
 #searchBox{
   position:absolute;
   top:10px;
   left:50px;
   z-index:1000;
   background:white;
-  padding:8px 10px;
+  padding:8px 12px;
   border-radius:6px;
   box-shadow:0 2px 6px rgba(0,0,0,0.2);
+  display:flex;
+  gap:6px;
+  align-items:center;
 }
 
 /* Sliding Panel */
 #sidePanel{
   position:absolute;
   top:0;
-  right:-350px;
-  width:350px;
+  right:-360px;
+  width:360px;
   height:100%;
   background:white;
   box-shadow:-4px 0 12px rgba(0,0,0,0.2);
   padding:20px;
-  transition: right 0.3s ease;
+  transition:right 0.3s ease;
   overflow-y:auto;
   z-index:1000;
 }
@@ -46,13 +49,13 @@ body { margin:0; }
   right:0;
 }
 
-/* Collapse Arrow */
+/* Panel Toggle */
 #panelToggle{
   position:absolute;
   top:50%;
-  right:350px;
+  right:0;
   transform:translateY(-50%);
-  width:30px;
+  width:28px;
   height:60px;
   background:white;
   border-radius:6px 0 0 6px;
@@ -66,8 +69,8 @@ body { margin:0; }
   transition:right 0.3s ease;
 }
 
-#panelToggle.closed{
-  right:0;
+#panelToggle.shifted{
+  right:360px;
 }
 
 /* Legend */
@@ -92,6 +95,11 @@ body { margin:0; }
 
 <div id="searchBox">
   <input type="text" id="postalInput" placeholder="Enter 6-digit postal" maxlength="6">
+  <select id="radiusSelect">
+    <option value="1">1km</option>
+    <option value="2">2km</option>
+    <option value="3">3km</option>
+  </select>
   <button onclick="searchPostal()">Search</button>
 </div>
 
@@ -100,112 +108,145 @@ body { margin:0; }
   <div id="evaluationContent"></div>
 </div>
 
-<div id="panelToggle" class="closed" onclick="togglePanel()">❯</div>
+<div id="panelToggle" onclick="togglePanel()">❯</div>
 
 <script src="locations.js"></script>
 
 <script>
 
-const map=L.map('map').setView([1.3521,103.8198],11);
+const map = L.map('map').setView([1.3521,103.8198],11);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
 
-/* Clinics */
+/* ================= CLINICS + BUFFERS ================= */
 
-const clinicLayer=L.markerClusterGroup();
+const clinicLayer = L.markerClusterGroup();
+const bufferLayer = L.layerGroup().addTo(map);
+
+function drawBuffers(radiusKm){
+  bufferLayer.clearLayers();
+  const radiusMeters = radiusKm * 1000;
+
+  locations.forEach(loc=>{
+    L.circle([loc.lat,loc.lng],{
+      radius:radiusMeters,
+      color:"#2b7bff",
+      weight:1,
+      fillColor:"#2b7bff",
+      fillOpacity:0.05
+    }).addTo(bufferLayer);
+  });
+}
+
 locations.forEach(loc=>{
-  const marker=L.marker([loc.lat,loc.lng]);
-  let popup=`<b>${loc.address}</b><br><br>`;
+  const marker = L.marker([loc.lat,loc.lng]);
+  let popup = `<b>${loc.address}</b><br><br>`;
   loc.clinics.forEach(c=>{
-    popup+=`<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
+    popup += `<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
   });
   marker.bindPopup(popup);
   clinicLayer.addLayer(marker);
 });
+
 map.addLayer(clinicLayer);
 
-/* Opportunity Grid */
+/* ================= OPPORTUNITY GRID ================= */
 
-const opportunityLayer=L.layerGroup();
-const cellSize=0.0035;
+const opportunityLayer = L.layerGroup();
+const cellSize = 0.0035;
 
-fetch("grid-1km.json?v="+Date.now())
-.then(res=>res.json())
-.then(grid=>{
-  grid.forEach(cell=>{
-    let color;
-    if(cell.type==="public_opportunity") color="#2ecc71";
-    else if(cell.type==="private_opportunity") color="#3498db";
-    else return;
+function loadGrid(radiusKm){
+  opportunityLayer.clearLayers();
 
-    L.rectangle([[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
-    {color,weight:0.2,fillColor:color,fillOpacity:0.35})
-    .addTo(opportunityLayer);
+  fetch(`grid-${radiusKm}km.json?v=${Date.now()}`)
+  .then(res=>res.json())
+  .then(grid=>{
+    grid.forEach(cell=>{
+      let color;
+      if(cell.type==="public_opportunity") color="#2ecc71";
+      else if(cell.type==="private_opportunity") color="#3498db";
+      else return;
+
+      L.rectangle(
+        [[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
+        {color,weight:0.2,fillColor:color,fillOpacity:0.35}
+      ).addTo(opportunityLayer);
+    });
   });
-});
+}
+
 map.addLayer(opportunityLayer);
 
-/* Industrial */
+/* ================= INDUSTRIAL & RESTRICTED ================= */
 
-const industrialLayer=L.geoJSON(null,{style:{color:"orange",weight:0.5,fillOpacity:0.3}});
+const industrialLayer = L.geoJSON(null,{style:{color:"orange",weight:0.5,fillOpacity:0.3}});
 fetch("industrial-zones.json?v="+Date.now())
 .then(res=>res.json())
-.then(data=>{
-  industrialLayer.addData(data);
-});
+.then(data=> industrialLayer.addData(data));
 map.addLayer(industrialLayer);
 
-/* Restricted */
-
-const restrictedLayer=L.geoJSON(null,{style:{color:"#444",weight:0.5,fillOpacity:0.35}});
+const restrictedLayer = L.geoJSON(null,{style:{color:"#444",weight:0.5,fillOpacity:0.35}});
 fetch("restricted-zones.json?v="+Date.now())
 .then(res=>res.json())
-.then(data=>{
-  restrictedLayer.addData(data);
-});
+.then(data=> restrictedLayer.addData(data));
 map.addLayer(restrictedLayer);
 
-/* Layers */
+/* ================= LAYERS ================= */
 
 L.control.layers(null,{
   "Clinics":clinicLayer,
+  "Buffers":bufferLayer,
   "Opportunity":opportunityLayer,
   "Industrial":industrialLayer,
   "Restricted":restrictedLayer
 }).addTo(map);
 
-/* Legend */
+/* ================= LEGEND ================= */
 
-const legend=L.control({position:'bottomright'});
-legend.onAdd=function(){
-  const div=L.DomUtil.create('div','legend');
-  div.innerHTML+="<b>Legend</b><br><br>";
-  div.innerHTML+='<i style="background:#2ecc71"></i> HDB-Dominant Opportunity<br>';
-  div.innerHTML+='<i style="background:#3498db"></i> Private-Dominant Opportunity<br>';
-  div.innerHTML+='<i style="background:orange"></i> Industrial<br>';
-  div.innerHTML+='<i style="background:#444"></i> Restricted<br>';
+const legend = L.control({position:'bottomright'});
+legend.onAdd = function(){
+  const div = L.DomUtil.create('div','legend');
+  div.innerHTML += "<b>Legend</b><br><br>";
+  div.innerHTML += '<i style="background:#2ecc71"></i> HDB Opportunity<br>';
+  div.innerHTML += '<i style="background:#3498db"></i> Private Opportunity<br>';
+  div.innerHTML += '<i style="background:orange"></i> Industrial<br>';
+  div.innerHTML += '<i style="background:#444"></i> Restricted<br>';
   return div;
 };
 legend.addTo(map);
 
-/* Sliding Panel Logic */
+/* ================= RADIUS SWITCH ================= */
+
+function updateRadius(){
+  const radius = parseInt(document.getElementById("radiusSelect").value);
+  drawBuffers(radius);
+  loadGrid(radius);
+}
+
+document.getElementById("radiusSelect")
+.addEventListener("change",updateRadius);
+
+/* Initial load */
+updateRadius();
+
+/* ================= PANEL ================= */
 
 function togglePanel(){
-  const panel=document.getElementById("sidePanel");
-  const toggle=document.getElementById("panelToggle");
+  const panel = document.getElementById("sidePanel");
+  const toggle = document.getElementById("panelToggle");
 
   if(panel.classList.contains("open")){
     panel.classList.remove("open");
-    toggle.classList.add("closed");
+    toggle.classList.remove("shifted");
     toggle.innerHTML="❯";
   }else{
     panel.classList.add("open");
-    toggle.classList.remove("closed");
+    toggle.classList.add("shifted");
     toggle.innerHTML="❮";
   }
 }
 
-/* Search Logic */
+/* ================= SEARCH ================= */
 
 let searchMarker=null;
 let lineLayer=L.layerGroup().addTo(map);
@@ -230,6 +271,8 @@ function searchPostal(){
   const postal=document.getElementById("postalInput").value.trim();
   if(postal.length!==6) return alert("Enter 6-digit postal");
 
+  const radius = parseInt(document.getElementById("radiusSelect").value);
+
   fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
   .then(res=>res.json())
   .then(data=>{
@@ -245,13 +288,11 @@ function searchPostal(){
     searchMarker=L.marker([lat,lng]).addTo(map);
     map.setView([lat,lng],15);
 
-    let count1=0,count2=0,count3=0;
+    let count=0;
 
     const distances=locations.map(loc=>{
       const d=haversine(lat,lng,loc.lat,loc.lng);
-      if(d<=1000) count1++;
-      if(d<=2000) count2++;
-      if(d<=3000) count3++;
+      if(d<=radius*1000) count++;
       return {...loc,distance:d};
     });
 
@@ -259,14 +300,12 @@ function searchPostal(){
     const nearest=distances.slice(0,3);
 
     let competition;
-    if(count1===0) competition="<span style='color:green'><b>Strong Opportunity</b></span>";
-    else if(count1<=2) competition="<span style='color:orange'><b>Moderate Competition</b></span>";
+    if(count===0) competition="<span style='color:green'><b>Strong Opportunity</b></span>";
+    else if(count<=2) competition="<span style='color:orange'><b>Moderate Competition</b></span>";
     else competition="<span style='color:red'><b>High Competition</b></span>";
 
-    let html="<b>Competition Summary</b><br><br>";
-    html+=`Within 1km: ${count1} clinics<br>`;
-    html+=`Within 2km: ${count2} clinics<br>`;
-    html+=`Within 3km: ${count3} clinics<br><br>`;
+    let html=`<b>Competition within ${radius}km</b><br><br>`;
+    html+=`Clinics: ${count}<br><br>`;
     html+=competition+"<br><br>";
     html+="<b>Nearest 3 Clinics</b><br><br>";
 
