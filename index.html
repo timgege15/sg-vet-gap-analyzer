@@ -15,6 +15,43 @@
 body { margin:0; }
 #map { height:100vh; }
 
+#searchBox {
+  position:absolute;
+  top:10px;
+  left:50px;
+  z-index:1000;
+  background:white;
+  padding:8px;
+  border-radius:6px;
+  box-shadow:0 0 6px rgba(0,0,0,0.2);
+}
+
+#sidePanel {
+  position:absolute;
+  right:0;
+  top:0;
+  width:300px;
+  height:100%;
+  background:white;
+  box-shadow:-3px 0 6px rgba(0,0,0,0.2);
+  padding:15px;
+  overflow-y:auto;
+  z-index:1000;
+  display:none;
+}
+
+#togglePanel {
+  position:absolute;
+  right:310px;
+  top:10px;
+  z-index:1001;
+  background:white;
+  padding:5px 10px;
+  border-radius:6px;
+  cursor:pointer;
+  box-shadow:0 0 6px rgba(0,0,0,0.2);
+}
+
 .legend {
   background:white;
   padding:10px;
@@ -27,7 +64,6 @@ body { margin:0; }
   height:14px;
   float:left;
   margin-right:8px;
-  opacity:0.9;
 }
 </style>
 </head>
@@ -35,11 +71,21 @@ body { margin:0; }
 
 <div id="map"></div>
 
+<div id="searchBox">
+  <input type="text" id="postalInput" placeholder="Enter 6-digit postal" maxlength="6">
+  <button onclick="searchPostal()">Search</button>
+</div>
+
+<div id="togglePanel" onclick="togglePanel()">Show Evaluation</div>
+
+<div id="sidePanel">
+  <h3>Site Evaluation</h3>
+  <div id="evaluationContent"></div>
+</div>
+
 <script src="locations.js"></script>
 
 <script>
-
-/* ================= MAP INIT ================= */
 
 const map = L.map('map').setView([1.3521,103.8198],11);
 
@@ -47,104 +93,66 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   maxZoom:18
 }).addTo(map);
 
-
-/* ================= CLINICS ================= */
+/* ---------------- CLINICS ---------------- */
 
 const clinicLayer = L.markerClusterGroup();
-
 locations.forEach(loc=>{
   const marker = L.marker([loc.lat,loc.lng]);
-
   let popup = `<b>${loc.address}</b><br><br>`;
   loc.clinics.forEach(c=>{
     popup += `<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
   });
-
   marker.bindPopup(popup);
   clinicLayer.addLayer(marker);
 });
-
 map.addLayer(clinicLayer);
 
-
-/* ================= OPPORTUNITY GRID ================= */
+/* ---------------- OPPORTUNITY ---------------- */
 
 const opportunityLayer = L.layerGroup();
 const cellSize = 0.0035;
 
-function loadGrid(radiusKm){
+fetch("grid-1km.json?v="+Date.now())
+.then(res=>res.json())
+.then(grid=>{
+  grid.forEach(cell=>{
+    let color = cell.type==="public_opportunity"
+      ? "#2ecc71"
+      : "#3498db";
 
-  opportunityLayer.clearLayers();
-
-  fetch(`grid-${radiusKm}km.json?v=${Date.now()}`)
-  .then(res=>res.json())
-  .then(grid=>{
-
-    grid.forEach(cell=>{
-
-      let color =
-        cell.type === "public_opportunity"
-        ? "#2ecc71"
-        : "#3498db";
-
-      L.rectangle(
-        [[cell.lat,cell.lng],
-         [cell.lat+cellSize,cell.lng+cellSize]],
-        {
-          color:color,
-          weight:0.2,
-          fillColor:color,
-          fillOpacity:0.35
-        }
-      ).addTo(opportunityLayer);
-
-    });
-
+    L.rectangle(
+      [[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
+      {color,weight:0.2,fillColor:color,fillOpacity:0.35}
+    ).addTo(opportunityLayer);
   });
-
-}
-
-loadGrid(1);
+});
 map.addLayer(opportunityLayer);
 
-
-/* ================= INDUSTRIAL ================= */
+/* ---------------- INDUSTRIAL ---------------- */
 
 const industrialLayer = L.geoJSON(null,{
-  style:{
-    color:"orange",
-    weight:0.5,
-    fillOpacity:0.3
-  }
+  style:{color:"orange",weight:0.5,fillOpacity:0.3}
+});
+fetch("industrial-zones.json?v="+Date.now())
+.then(res=>res.json())
+.then(data=>{
+  industrialLayer.addData(data);
+  map.addLayer(industrialLayer);
 });
 
-fetch("industrial-zones.json?v="+Date.now())
-  .then(res=>res.json())
-  .then(data=>{
-    industrialLayer.addData(data);
-    map.addLayer(industrialLayer);   // ON by default
-  });
-
-
-/* ================= RESTRICTED ================= */
+/* ---------------- RESTRICTED ---------------- */
 
 const restrictedLayer = L.geoJSON(null,{
-  style:{
-    color:"#444",
-    weight:0.5,
-    fillOpacity:0.35
-  }
+  style:{color:"#444",weight:0.5,fillOpacity:0.35}
+});
+fetch("restricted-zones.json?v="+Date.now())
+.then(res=>res.json())
+.then(data=>{
+  restrictedLayer.addData(data);
+  map.addLayer(restrictedLayer);
 });
 
-fetch("restricted-zones.json?v="+Date.now())
-  .then(res=>res.json())
-  .then(data=>{
-    restrictedLayer.addData(data);
-    map.addLayer(restrictedLayer);   // ON by default
-  });
-
-
-/* ================= LAYER CONTROL ================= */
+/* ---------------- LAYER CONTROL ---------------- */
 
 L.control.layers(null,{
   "Clinics": clinicLayer,
@@ -153,13 +161,11 @@ L.control.layers(null,{
   "Restricted": restrictedLayer
 }).addTo(map);
 
-
-/* ================= LEGEND ================= */
+/* ---------------- LEGEND ---------------- */
 
 const legend = L.control({position:'bottomright'});
-
-legend.onAdd = function(){
-  const div = L.DomUtil.create('div','legend');
+legend.onAdd=function(){
+  const div=L.DomUtil.create('div','legend');
   div.innerHTML += "<b>Legend</b><br><br>";
   div.innerHTML += '<i style="background:#2ecc71"></i> HDB-Dominant Opportunity<br>';
   div.innerHTML += '<i style="background:#3498db"></i> Private-Dominant Opportunity<br>';
@@ -167,8 +173,92 @@ legend.onAdd = function(){
   div.innerHTML += '<i style="background:#444"></i> Restricted<br>';
   return div;
 };
-
 legend.addTo(map);
+
+/* ---------------- POSTAL SEARCH ---------------- */
+
+let searchMarker = null;
+let lineLayer = L.layerGroup().addTo(map);
+
+function togglePanel(){
+  const panel=document.getElementById("sidePanel");
+  const toggle=document.getElementById("togglePanel");
+
+  if(panel.style.display==="none"){
+    panel.style.display="block";
+    toggle.innerText="Hide Evaluation";
+  }else{
+    panel.style.display="none";
+    toggle.innerText="Show Evaluation";
+  }
+}
+
+function formatDistance(m){
+  if(m<1000) return Math.round(m)+" m";
+  return (m/1000).toFixed(2)+" km";
+}
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000;
+  const toRad=x=>x*Math.PI/180;
+  const dLat=toRad(lat2-lat1);
+  const dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2+
+          Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
+          Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function searchPostal(){
+  const postal=document.getElementById("postalInput").value.trim();
+  if(postal.length!==6) return alert("Enter 6-digit postal code");
+
+  fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
+  .then(res=>res.json())
+  .then(data=>{
+    if(data.found===0) return alert("Postal not found");
+
+    const result=data.results[0];
+    const lat=parseFloat(result.LATITUDE);
+    const lng=parseFloat(result.LONGITUDE);
+
+    if(searchMarker) map.removeLayer(searchMarker);
+    lineLayer.clearLayers();
+
+    searchMarker=L.marker([lat,lng],{color:"red"}).addTo(map);
+    map.setView([lat,lng],15);
+
+    const distances=locations.map(loc=>{
+      return {
+        ...loc,
+        distance:haversine(lat,lng,loc.lat,loc.lng)
+      };
+    });
+
+    distances.sort((a,b)=>a.distance-b.distance);
+
+    const nearest=distances.slice(0,3);
+
+    let html="<b>Nearest 3 Clinics</b><br><br>";
+
+    nearest.forEach(n=>{
+      html+=`<b>${n.clinics[0].name}</b><br>
+             ${formatDistance(n.distance)}<br><br>`;
+
+      L.polyline([[lat,lng],[n.lat,n.lng]],
+        {color:"red",weight:2}).addTo(lineLayer);
+    });
+
+    document.getElementById("evaluationContent").innerHTML=html;
+    document.getElementById("sidePanel").style.display="block";
+    document.getElementById("togglePanel").innerText="Hide Evaluation";
+  });
+}
+
+document.getElementById("postalInput")
+.addEventListener("keypress",function(e){
+  if(e.key==="Enter") searchPostal();
+});
 
 </script>
 </body>
