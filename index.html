@@ -8,82 +8,33 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
 
-/* ---------------- LEGEND ---------------- */
-
-const legend = L.control({position: "bottomleft"});
-
-legend.onAdd = function (map) {
-  const div = L.DomUtil.create("div", "info legend");
-  div.style.background = "white";
-  div.style.padding = "10px";
-  div.style.borderRadius = "6px";
-  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
-  div.innerHTML = `
-    <b>Legend</b><br><br>
-    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
-    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
-    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
-    <span style="color:blue;">◯</span> 1km Competition Radius<br>
-    <span style="color:red;">—</span> Site Evaluation Lines
-  `;
-  return div;
-};
-
-legend.addTo(map);
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-/* ---------------- LEGEND ---------------- */
-
-const legend = L.control({position: "bottomleft"});
-
-legend.onAdd = function (map) {
-  const div = L.DomUtil.create("div", "info legend");
-  div.style.background = "white";
-  div.style.padding = "10px";
-  div.style.borderRadius = "6px";
-  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
-  div.innerHTML = `
-    <b>Legend</b><br><br>
-    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
-    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
-    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
-    <span style="color:blue;">◯</span> 1km Competition Radius<br>
-    <span style="color:red;">—</span> Site Evaluation Lines
-  `;
-  return div;
-};
-
-legend.addTo(map);
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
 
 <style>
-body { margin:0; }
+body { margin:0; font-family:Arial, sans-serif; }
 #map { height:100vh; }
 
-/* Competition Controls */
-.control-box {
+/* Strategy Panel */
+.control-panel {
   position:absolute;
   top:10px;
   left:10px;
+  width:260px;
   background:white;
-  padding:12px;
+  padding:15px;
   border-radius:8px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.2);
+  box-shadow:0 3px 8px rgba(0,0,0,0.25);
   z-index:1000;
-  width:220px;
   font-size:14px;
 }
 
-/* Toggle Button */
-#togglePanel {
-  position:absolute;
-  bottom:20px;
-  right:20px;
-  background:white;
-  padding:8px 14px;
-  border-radius:6px;
-  cursor:pointer;
-  box-shadow:0 2px 6px rgba(0,0,0,0.3);
-  z-index:1300;
+.control-panel input,
+.control-panel select {
+  width:100%;
+  margin-top:6px;
+  margin-bottom:12px;
+  padding:6px;
 }
 
 /* Side Panel */
@@ -91,18 +42,28 @@ body { margin:0; }
   position:absolute;
   top:0;
   right:0;
-  width:320px;
+  width:340px;
   height:100%;
   background:white;
-  box-shadow:-2px 0 6px rgba(0,0,0,0.3);
+  box-shadow:-3px 0 10px rgba(0,0,0,0.3);
   padding:20px;
   overflow:auto;
   transform:translateX(100%);
   transition:0.3s ease;
   z-index:1200;
 }
+
 #sidePanel.open {
   transform:translateX(0);
+}
+
+/* Legend */
+.legend {
+  background:white;
+  padding:10px;
+  border-radius:6px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.3);
+  line-height:20px;
 }
 </style>
 </head>
@@ -110,58 +71,36 @@ body { margin:0; }
 
 <div id="map"></div>
 
-<div class="control-box">
-<b>Competition Radius</b>
-<select id="radiusSelect">
-<option value="1">1 km</option>
-<option value="2">2 km</option>
-<option value="3">3 km</option>
-</select><br><br>
+<div class="control-panel">
+  <b>Competition Radius</b>
+  <select id="radiusSelect">
+    <option value="1">1 km</option>
+    <option value="2">2 km</option>
+    <option value="3">3 km</option>
+  </select>
 
-<b>Max Clinics</b>
-<input type="number" id="maxClinics" value="1"><br><br>
+  <b>Max Clinics Within Radius</b>
+  <input type="number" id="maxClinics" value="1">
 
-<b>Min Residential %</b>
-<input type="number" id="minRes" value="40">
+  <b>Min Residential %</b>
+  <input type="number" id="minRes" value="40">
+
+  <hr>
+
+  <b>Evaluate Site (Postal Code)</b>
+  <input type="text" id="postalInput" placeholder="Enter 6-digit postal">
+  <button onclick="searchPostal()">Evaluate</button>
 </div>
-
-<div id="togglePanel">Site Evaluation</div>
 
 <div id="sidePanel">
-<h3>Postal Search</h3>
-<input type="text" id="postalInput" placeholder="Enter 6-digit postal">
-<button onclick="searchPostal()">Search</button>
-<div id="result"></div>
+  <h3>Site Evaluation</h3>
+  <div id="evaluationResult"></div>
 </div>
 
-/* ---------------- LEGEND ---------------- */
-
-const legend = L.control({position: "bottomleft"});
-
-legend.onAdd = function (map) {
-  const div = L.DomUtil.create("div", "info legend");
-  div.style.background = "white";
-  div.style.padding = "10px";
-  div.style.borderRadius = "6px";
-  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
-  div.innerHTML = `
-    <b>Legend</b><br><br>
-    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
-    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
-    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
-    <span style="color:blue;">◯</span> 1km Competition Radius<br>
-    <span style="color:red;">—</span> Site Evaluation Lines
-  `;
-  return div;
-};
-
-legend.addTo(map);
 <script src="locations.js"></script>
 
 <script>
-const map = L.map('map', {
-  zoomControl:false
-}).setView([1.3521,103.8198],11);
+const map = L.map('map',{zoomControl:false}).setView([1.3521,103.8198],11);
 
 L.control.zoom({ position:'topright' }).addTo(map);
 
@@ -169,7 +108,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   maxZoom:18
 }).addTo(map);
 
-/* ---------------- CLINICS ---------------- */
+/* ---------------- Clinics ---------------- */
 
 const clinicCluster = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
@@ -177,12 +116,10 @@ const searchLineLayer = L.layerGroup();
 
 locations.forEach(loc=>{
   const marker = L.marker([loc.lat, loc.lng]);
-
   let popup = `<b>${loc.address}</b><br>`;
   loc.clinics.forEach(c=>{
     popup += `${c.name}<br>${c.phone}<br><br>`;
   });
-
   marker.bindPopup(popup);
   clinicCluster.addLayer(marker);
 
@@ -192,22 +129,22 @@ locations.forEach(loc=>{
     weight:1,
     fillOpacity:0.05
   });
-
   bufferLayer.addLayer(circle);
 });
 
 map.addLayer(clinicCluster);
+map.addLayer(bufferLayer);
 
-/* ---------------- INDUSTRIAL & RESTRICTED ---------------- */
+/* ---------------- Zoning ---------------- */
 
-const industrialLayer = L.layerGroup();
-const restrictedLayer = L.layerGroup();
+const industrialLayer = L.layerGroup().addTo(map);
+const restrictedLayer = L.layerGroup().addTo(map);
 
 fetch('industrial-zones.json')
 .then(r=>r.json())
 .then(data=>{
   L.geoJSON(data,{
-    style:{ color:'orange', weight:1, fillOpacity:0.2 }
+    style:{ color:'orange', weight:1, fillOpacity:0.15 }
   }).addTo(industrialLayer);
 });
 
@@ -215,11 +152,11 @@ fetch('restricted-zones.json')
 .then(r=>r.json())
 .then(data=>{
   L.geoJSON(data,{
-    style:{ color:'black', weight:1, fillOpacity:0.3 }
+    style:{ color:'black', weight:1, fillOpacity:0.25 }
   }).addTo(restrictedLayer);
 });
 
-/* ---------------- GRID ---------------- */
+/* ---------------- Grid ---------------- */
 
 let grids = {};
 let activeGrid = L.layerGroup().addTo(map);
@@ -262,7 +199,7 @@ document.getElementById('radiusSelect').onchange=renderGrid;
 document.getElementById('maxClinics').oninput=renderGrid;
 document.getElementById('minRes').oninput=renderGrid;
 
-/* ---------------- POSTAL SEARCH ---------------- */
+/* ---------------- Postal Search ---------------- */
 
 function haversine(a,b,c,d){
 const R=6371000;
@@ -277,6 +214,7 @@ return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 
 function searchPostal(){
 searchLineLayer.clearLayers();
+map.addLayer(searchLineLayer);
 
 const postal=document.getElementById('postalInput').value;
 
@@ -290,7 +228,7 @@ const lng=parseFloat(data.results[0].LONGITUDE);
 
 map.setView([lat,lng],15);
 
-const siteMarker=L.marker([lat,lng]).addTo(map);
+L.marker([lat,lng]).addTo(map);
 
 let distances=locations.map(loc=>{
 return {...loc,dist:haversine(lat,lng,loc.lat,loc.lng)};
@@ -308,19 +246,30 @@ color:'red'
 html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
 });
 
-map.addLayer(searchLineLayer);
-
-document.getElementById('result').innerHTML=html;
+document.getElementById('evaluationResult').innerHTML=html;
+document.getElementById('sidePanel').classList.add('open');
 });
 }
 
-/* ---------------- PANEL TOGGLE ---------------- */
+/* ---------------- Legend ---------------- */
 
-document.getElementById('togglePanel').onclick=function(){
-document.getElementById('sidePanel').classList.toggle('open');
+const legend = L.control({position:"bottomleft"});
+
+legend.onAdd=function(){
+const div=L.DomUtil.create("div","legend");
+div.innerHTML=`
+<b>Legend</b><br><br>
+<span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
+<span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
+<span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
+<span style="color:blue;">◯</span> 1km Buffer<br>
+<span style="color:red;">—</span> Site Evaluation Lines
+`;
+return div;
 };
+legend.addTo(map);
 
-/* ---------------- LAYER CONTROL ---------------- */
+/* ---------------- Layer Control ---------------- */
 
 L.control.layers(null,{
 "Clinics":clinicCluster,
@@ -330,28 +279,6 @@ L.control.layers(null,{
 "Restricted":restrictedLayer
 },{position:'topright'}).addTo(map);
 
-/* ---------------- LEGEND ---------------- */
-
-const legend = L.control({position: "bottomleft"});
-
-legend.onAdd = function (map) {
-  const div = L.DomUtil.create("div", "info legend");
-  div.style.background = "white";
-  div.style.padding = "10px";
-  div.style.borderRadius = "6px";
-  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
-  div.innerHTML = `
-    <b>Legend</b><br><br>
-    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
-    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
-    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
-    <span style="color:blue;">◯</span> 1km Competition Radius<br>
-    <span style="color:red;">—</span> Site Evaluation Lines
-  `;
-  return div;
-};
-
-legend.addTo(map);
 </script>
 </body>
 </html>
