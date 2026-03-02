@@ -48,7 +48,10 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 const clinicLayer = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
-const gridLayer = L.layerGroup();
+
+const opportunityLayer = L.layerGroup();
+const industrialLayer = L.layerGroup();
+const restrictedLayer = L.layerGroup();
 
 /* ============================
    LOAD CLINICS
@@ -85,14 +88,18 @@ fetch('grid-precomputed.json')
 
     grid.forEach(cell => {
 
+      let layer;
       let color;
 
-      if (cell.type === "industrial") {
+      if (cell.type === "opportunity") {
+        layer = opportunityLayer;
+        color = "green";
+      } else if (cell.type === "industrial") {
+        layer = industrialLayer;
         color = "orange";
       } else if (cell.type === "restricted") {
+        layer = restrictedLayer;
         color = "#444";
-      } else if (cell.type === "opportunity") {
-        color = "green";
       } else {
         return;
       }
@@ -106,10 +113,12 @@ fetch('grid-precomputed.json')
           fillColor: color,
           fillOpacity: 0.35
         }
-      ).addTo(gridLayer);
+      ).addTo(layer);
     });
 
-    map.addLayer(gridLayer);
+    map.addLayer(opportunityLayer);
+    map.addLayer(industrialLayer);
+    map.addLayer(restrictedLayer);
   });
 
 /* ============================
@@ -119,7 +128,9 @@ fetch('grid-precomputed.json')
 L.control.layers(null, {
   "Clinics": clinicLayer,
   "1km Buffers": bufferLayer,
-  "Strategic Zoning Grid": gridLayer
+  "Residential Opportunity": opportunityLayer,
+  "Industrial / Business (Excluded)": industrialLayer,
+  "Restricted / Defence (Excluded)": restrictedLayer
 }).addTo(map);
 
 /* ============================
