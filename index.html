@@ -8,7 +8,51 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster/dist/MarkerCluster.Default.css"/>
 
+/* ---------------- LEGEND ---------------- */
+
+const legend = L.control({position: "bottomleft"});
+
+legend.onAdd = function (map) {
+  const div = L.DomUtil.create("div", "info legend");
+  div.style.background = "white";
+  div.style.padding = "10px";
+  div.style.borderRadius = "6px";
+  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+  div.innerHTML = `
+    <b>Legend</b><br><br>
+    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
+    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
+    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
+    <span style="color:blue;">◯</span> 1km Competition Radius<br>
+    <span style="color:red;">—</span> Site Evaluation Lines
+  `;
+  return div;
+};
+
+legend.addTo(map);
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+/* ---------------- LEGEND ---------------- */
+
+const legend = L.control({position: "bottomleft"});
+
+legend.onAdd = function (map) {
+  const div = L.DomUtil.create("div", "info legend");
+  div.style.background = "white";
+  div.style.padding = "10px";
+  div.style.borderRadius = "6px";
+  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+  div.innerHTML = `
+    <b>Legend</b><br><br>
+    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
+    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
+    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
+    <span style="color:blue;">◯</span> 1km Competition Radius<br>
+    <span style="color:red;">—</span> Site Evaluation Lines
+  `;
+  return div;
+};
+
+legend.addTo(map);
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
 
 <style>
@@ -90,6 +134,28 @@ body { margin:0; }
 <div id="result"></div>
 </div>
 
+/* ---------------- LEGEND ---------------- */
+
+const legend = L.control({position: "bottomleft"});
+
+legend.onAdd = function (map) {
+  const div = L.DomUtil.create("div", "info legend");
+  div.style.background = "white";
+  div.style.padding = "10px";
+  div.style.borderRadius = "6px";
+  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+  div.innerHTML = `
+    <b>Legend</b><br><br>
+    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
+    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
+    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
+    <span style="color:blue;">◯</span> 1km Competition Radius<br>
+    <span style="color:red;">—</span> Site Evaluation Lines
+  `;
+  return div;
+};
+
+legend.addTo(map);
 <script src="locations.js"></script>
 
 <script>
@@ -264,6 +330,28 @@ L.control.layers(null,{
 "Restricted":restrictedLayer
 },{position:'topright'}).addTo(map);
 
+/* ---------------- LEGEND ---------------- */
+
+const legend = L.control({position: "bottomleft"});
+
+legend.onAdd = function (map) {
+  const div = L.DomUtil.create("div", "info legend");
+  div.style.background = "white";
+  div.style.padding = "10px";
+  div.style.borderRadius = "6px";
+  div.style.boxShadow = "0 2px 6px rgba(0,0,0,0.3)";
+  div.innerHTML = `
+    <b>Legend</b><br><br>
+    <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
+    <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
+    <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
+    <span style="color:blue;">◯</span> 1km Competition Radius<br>
+    <span style="color:red;">—</span> Site Evaluation Lines
+  `;
+  return div;
+};
+
+legend.addTo(map);
 </script>
 </body>
 </html>
