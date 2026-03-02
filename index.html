@@ -15,7 +15,6 @@
 body { margin: 0; }
 #map { height: 100vh; }
 
-/* Radius */
 .radius-control {
   position: absolute;
   top: 85px;
@@ -28,7 +27,6 @@ body { margin: 0; }
   font-size: 13px;
 }
 
-/* Search */
 .search-control {
   position: absolute;
   top: 155px;
@@ -41,12 +39,11 @@ body { margin: 0; }
   font-size: 13px;
 }
 
-/* Panel */
 .side-panel {
   position: absolute;
   top: 0;
   right: 0;
-  width: 320px;
+  width: 340px;
   height: 100%;
   background: white;
   z-index: 1500;
@@ -71,6 +68,21 @@ body { margin: 0; }
   font-weight: bold;
   font-size: 18px;
 }
+
+.loading {
+  color: #888;
+  font-style: italic;
+}
+
+.score {
+  padding: 8px;
+  border-radius: 6px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+.good { background:#d4edda; color:#155724; }
+.medium { background:#fff3cd; color:#856404; }
+.bad { background:#f8d7da; color:#721c24; }
 </style>
 </head>
 <body>
@@ -80,16 +92,18 @@ body { margin: 0; }
 <div class="radius-control">
   Competition Radius:
   <select id="radiusSelect">
-    <option value="1">1km</option>
-    <option value="2">2km</option>
-    <option value="3">3km</option>
+    <option value="1000">1km</option>
+    <option value="2000">2km</option>
+    <option value="3000">3km</option>
   </select>
 </div>
 
 <div class="search-control">
   <div><b>Evaluate Site</b></div>
-  <input type="text" id="postalInput" placeholder="Postal Code" />
-  <button onclick="searchPostal()">Search</button>
+  <form onsubmit="handleSearch(event)">
+    <input type="text" id="postalInput" placeholder="Postal Code" />
+    <button type="submit">Search</button>
+  </form>
 </div>
 
 <div class="side-panel hidden" id="resultsPanel">
@@ -106,10 +120,7 @@ body { margin: 0; }
 
 <script>
 const map = L.map('map').setView([1.3521, 103.8198], 11);
-
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 18
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
 
 const clinicLayer = L.markerClusterGroup();
 const opportunityLayer = L.layerGroup();
@@ -120,157 +131,159 @@ const lineLayer = L.layerGroup().addTo(map);
 let siteMarker = null;
 let currentGridLayer = null;
 
-/* Load Clinics */
+document.getElementById("postalInput").focus();
+
+/* ===== RESTORE CLINIC POPUPS ===== */
 locations.forEach(loc => {
-  clinicLayer.addLayer(L.marker([loc.lat, loc.lng]));
+
+  const marker = L.marker([loc.lat, loc.lng]);
+
+  let popup = `<b>${loc.address}</b><br><br>`;
+
+  loc.clinics.forEach(c=>{
+    popup += `<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
+  });
+
+  marker.bindPopup(popup);
+  clinicLayer.addLayer(marker);
 });
+
 map.addLayer(clinicLayer);
 
-/* Load Grid */
-function loadGrid(radiusKm) {
-
-  if (currentGridLayer) map.removeLayer(currentGridLayer);
+/* ===== GRID LOADING ===== */
+function loadGrid(radiusKm){
+  if(currentGridLayer) map.removeLayer(currentGridLayer);
 
   opportunityLayer.clearLayers();
   industrialLayer.clearLayers();
   restrictedLayer.clearLayers();
 
-  fetch(`grid-${radiusKm}km.json`)
-    .then(res => res.json())
-    .then(grid => {
+  fetch(`grid-${radiusKm/1000}km.json`)
+  .then(res=>res.json())
+  .then(grid=>{
+    const cellSize=0.0035;
+    grid.forEach(cell=>{
+      let layer,color;
+      if(cell.type==="opportunity"){layer=opportunityLayer;color="green";}
+      else if(cell.type==="industrial"){layer=industrialLayer;color="orange";}
+      else if(cell.type==="restricted"){layer=restrictedLayer;color="#444";}
+      else return;
 
-      const cellSize = 0.0035;
-
-      grid.forEach(cell => {
-
-        let layer;
-        let color;
-
-        if (cell.type === "opportunity") {
-          layer = opportunityLayer;
-          color = "green";
-        } else if (cell.type === "industrial") {
-          layer = industrialLayer;
-          color = "orange";
-        } else if (cell.type === "restricted") {
-          layer = restrictedLayer;
-          color = "#444";
-        } else return;
-
-        L.rectangle(
-          [[cell.lat, cell.lng],
-           [cell.lat + cellSize, cell.lng + cellSize]],
-          {color: color, weight: 0.2, fillColor: color, fillOpacity: 0.35}
-        ).addTo(layer);
-      });
-
-      currentGridLayer = L.layerGroup([
-        opportunityLayer,
-        industrialLayer,
-        restrictedLayer
-      ]);
-
-      map.addLayer(currentGridLayer);
+      L.rectangle([[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
+      {color,weight:0.2,fillColor:color,fillOpacity:0.35}).addTo(layer);
     });
-}
 
-loadGrid(1);
-
-document.getElementById("radiusSelect")
-  .addEventListener("change", function() {
-    loadGrid(this.value);
+    currentGridLayer=L.layerGroup([opportunityLayer,industrialLayer,restrictedLayer]);
+    map.addLayer(currentGridLayer);
   });
-
-/* Distance */
-function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = x => x * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat/2)**2 +
-            Math.cos(toRad(lat1)) *
-            Math.cos(toRad(lat2)) *
-            Math.sin(dLon/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* Panel Toggle */
-function togglePanel() {
+loadGrid(1000);
+
+document.getElementById("radiusSelect").addEventListener("change",function(){
+  loadGrid(parseInt(this.value));
+});
+
+/* ===== DISTANCE ===== */
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000;
+  const toRad=x=>x*Math.PI/180;
+  const dLat=toRad(lat2-lat1);
+  const dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2+
+    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/* ===== PANEL ===== */
+function togglePanel(){
   document.getElementById("resultsPanel").classList.toggle("hidden");
 }
 
-/* Postal Search */
-function searchPostal() {
+/* ===== SEARCH ===== */
+function handleSearch(e){
+  e.preventDefault();
+  searchPostal();
+}
 
-  const postal = document.getElementById("postalInput").value.trim();
+function searchPostal(){
 
-  if (!/^\d{6}$/.test(postal)) {
+  const postal=document.getElementById("postalInput").value.trim();
+  if(!/^\d{6}$/.test(postal)){
     alert("Enter valid 6-digit postal code.");
     return;
   }
 
+  document.getElementById("resultsContent").innerHTML="<div class='loading'>Searching...</div>";
+  document.getElementById("resultsPanel").classList.remove("hidden");
+
   fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
-    .then(res => res.json())
-    .then(data => {
+  .then(res=>res.json())
+  .then(data=>{
+    if(!data.results.length){alert("Postal not found.");return;}
 
-      if (!data.results.length) {
-        alert("Postal code not found.");
-        return;
-      }
+    const lat=parseFloat(data.results[0].LATITUDE);
+    const lng=parseFloat(data.results[0].LONGITUDE);
 
-      const lat = parseFloat(data.results[0].LATITUDE);
-      const lng = parseFloat(data.results[0].LONGITUDE);
+    if(siteMarker) map.removeLayer(siteMarker);
+    lineLayer.clearLayers();
 
-      if (siteMarker) map.removeLayer(siteMarker);
-      lineLayer.clearLayers();
+    siteMarker=L.marker([lat,lng]).addTo(map);
+    map.setView([lat,lng],15);
 
-      siteMarker = L.marker([lat, lng]).addTo(map);
-      map.setView([lat, lng], 15);
-
-      evaluateSite(lat, lng);
-      document.getElementById("resultsPanel").classList.remove("hidden");
-    });
+    evaluateSite(lat,lng);
+  });
 }
 
-function evaluateSite(lat, lng) {
+function evaluateSite(lat,lng){
 
-  let distances = [];
+  const radius=parseInt(document.getElementById("radiusSelect").value);
 
-  locations.forEach(loc => {
-    const d = haversine(lat, lng, loc.lat, loc.lng);
-    distances.push({ distance: d, location: loc });
+  let distances=[];
+  locations.forEach(loc=>{
+    const d=haversine(lat,lng,loc.lat,loc.lng);
+    distances.push({distance:d,location:loc});
   });
 
-  distances.sort((a,b) => a.distance - b.distance);
-  const top3 = distances.slice(0,3);
+  distances.sort((a,b)=>a.distance-b.distance);
 
-  let html = "<h3>Nearest Clinics</h3>";
+  const top3=distances.slice(0,3);
+  const withinRadius=distances.filter(d=>d.distance<=radius).length;
 
-  top3.forEach((item, index) => {
+  let scoreClass="good";
+  let scoreText="Low Competition";
 
-    const d = item.distance;
-    const distText = d < 1000 ? `${Math.round(d)} m`
-                              : `${(d/1000).toFixed(2)} km`;
+  if(withinRadius>=5){scoreClass="bad";scoreText="High Competition";}
+  else if(withinRadius>=3){scoreClass="medium";scoreText="Moderate Competition";}
 
-    html += `<p><b>${index+1}. ${item.location.clinics.map(c=>c.name).join(", ")}</b><br>
-             Distance: ${distText}<br>
-             Address: ${item.location.address}</p>`;
+  let html=`<div class="score ${scoreClass}">
+  Competition within ${radius/1000}km: ${withinRadius}<br>
+  ${scoreText}
+  </div>`;
 
-    L.polyline(
-      [[lat, lng], [item.location.lat, item.location.lng]],
-      {color: 'red', dashArray: '4'}
-    ).addTo(lineLayer);
+  html+="<h3>Nearest Clinics</h3>";
+
+  top3.forEach((item,i)=>{
+    const d=item.distance;
+    const distText=d<1000?`${Math.round(d)} m`:`${(d/1000).toFixed(2)} km`;
+
+    html+=`<p><b>${i+1}. ${item.location.clinics.map(c=>c.name).join(", ")}</b><br>
+    Distance: ${distText}<br>
+    Address: ${item.location.address}</p>`;
+
+    L.polyline([[lat,lng],[item.location.lat,item.location.lng]],
+    {color:'red',dashArray:'4'}).addTo(lineLayer);
   });
 
-  document.getElementById("resultsContent").innerHTML = html;
+  document.getElementById("resultsContent").innerHTML=html;
 }
 
-/* Layer Control (RESTORED) */
-L.control.layers(null, {
-  "Clinics": clinicLayer,
-  "Residential Opportunity": opportunityLayer,
-  "Industrial / Business": industrialLayer,
-  "Restricted / Defence": restrictedLayer
+/* ===== LAYER CONTROL ===== */
+L.control.layers(null,{
+  "Clinics":clinicLayer,
+  "Residential Opportunity":opportunityLayer,
+  "Industrial / Business":industrialLayer,
+  "Restricted / Defence":restrictedLayer
 }).addTo(map);
 
 </script>
