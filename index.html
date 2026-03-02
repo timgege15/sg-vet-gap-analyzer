@@ -126,7 +126,7 @@ function pointInPolygon(point, vs) {
 
 let uraFeatures = [];
 
-fetch('ura-landuse-simplified.geojson')
+fetch('ura-zoning-subset.geojson')
   .then(res => res.json())
   .then(data => {
 
