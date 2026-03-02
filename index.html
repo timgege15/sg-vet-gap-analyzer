@@ -18,7 +18,7 @@ body { margin: 0; }
 /* Radius Control */
 .radius-control {
   position: absolute;
-  top: 70px;
+  top: 85px;
   left: 10px;
   z-index: 2000;
   background: white;
@@ -31,7 +31,7 @@ body { margin: 0; }
 /* Postal Search */
 .search-control {
   position: absolute;
-  top: 130px;
+  top: 155px;
   left: 10px;
   z-index: 2000;
   background: white;
@@ -41,22 +41,12 @@ body { margin: 0; }
   font-size: 13px;
 }
 
-.search-control input {
-  width: 120px;
-  padding: 4px;
-}
-
-.search-control button {
-  margin-left: 5px;
-  padding: 4px 6px;
-}
-
 /* Side Panel */
 .side-panel {
   position: absolute;
   top: 0;
   right: 0;
-  width: 280px;
+  width: 300px;
   height: 100%;
   background: white;
   z-index: 1500;
@@ -64,10 +54,23 @@ body { margin: 0; }
   box-shadow: -2px 0 6px rgba(0,0,0,0.2);
   overflow-y: auto;
   font-size: 14px;
+  transition: transform 0.3s ease;
 }
 
-.side-panel h3 {
-  margin-top: 0;
+.side-panel.hidden {
+  transform: translateX(100%);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.close-btn {
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 18px;
 }
 
 .legend {
@@ -77,14 +80,6 @@ body { margin: 0; }
   border-radius: 6px;
   box-shadow: 0 0 6px rgba(0,0,0,0.2);
   font-size: 13px;
-}
-
-.legend i {
-  width: 14px;
-  height: 14px;
-  float: left;
-  margin-right: 8px;
-  opacity: 0.85;
 }
 </style>
 </head>
@@ -107,8 +102,11 @@ body { margin: 0; }
   <button onclick="searchPostal()">Search</button>
 </div>
 
-<div class="side-panel" id="resultsPanel">
-  <h3>Site Evaluation</h3>
+<div class="side-panel hidden" id="resultsPanel">
+  <div class="panel-header">
+    <h3>Site Evaluation</h3>
+    <div class="close-btn" onclick="togglePanel()">×</div>
+  </div>
   <div id="resultsContent">
     Enter postal code to evaluate location.
   </div>
@@ -124,27 +122,15 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 const clinicLayer = L.markerClusterGroup();
-const bufferLayer = L.layerGroup();
-
 let siteMarker = null;
 let lineLayer = L.layerGroup().addTo(map);
 
 locations.forEach(loc => {
   clinicLayer.addLayer(L.marker([loc.lat, loc.lng]));
-  bufferLayer.addLayer(
-    L.circle([loc.lat, loc.lng], {
-      radius: 1000,
-      color: '#2b7bff',
-      weight: 1,
-      fillOpacity: 0.05
-    })
-  );
 });
-
 map.addLayer(clinicLayer);
-map.addLayer(bufferLayer);
 
-/* Distance function */
+/* Distance */
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const toRad = x => x * Math.PI / 180;
@@ -157,8 +143,14 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* Postal Search */
+/* Toggle Panel */
+function togglePanel() {
+  document.getElementById("resultsPanel").classList.toggle("hidden");
+}
+
+/* Search */
 function searchPostal() {
+
   const postal = document.getElementById("postalInput").value.trim();
 
   if (!/^\d{6}$/.test(postal)) {
@@ -166,7 +158,7 @@ function searchPostal() {
     return;
   }
 
-  fetch(`https://developers.onemap.sg/commonapi/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
+  fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
     .then(res => res.json())
     .then(data => {
 
@@ -181,10 +173,11 @@ function searchPostal() {
       if (siteMarker) map.removeLayer(siteMarker);
       lineLayer.clearLayers();
 
-      siteMarker = L.marker([lat, lng], {color: 'red'}).addTo(map);
+      siteMarker = L.marker([lat, lng]).addTo(map);
       map.setView([lat, lng], 15);
 
       evaluateSite(lat, lng);
+      document.getElementById("resultsPanel").classList.remove("hidden");
     });
 }
 
@@ -194,14 +187,10 @@ function evaluateSite(lat, lng) {
 
   locations.forEach(loc => {
     const d = haversine(lat, lng, loc.lat, loc.lng);
-    distances.push({
-      distance: d,
-      location: loc
-    });
+    distances.push({ distance: d, location: loc });
   });
 
   distances.sort((a,b) => a.distance - b.distance);
-
   const top3 = distances.slice(0,3);
 
   let html = "<h3>Nearest Clinics</h3>";
@@ -226,7 +215,6 @@ function evaluateSite(lat, lng) {
 
   document.getElementById("resultsContent").innerHTML = html;
 }
-
 </script>
 </body>
 </html>
