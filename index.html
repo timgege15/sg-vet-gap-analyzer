@@ -10,12 +10,12 @@
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
 <style>
 body { margin:0; font-family:Arial; }
 #map { height:100vh; }
 
-/* Strategy Panel */
 .control-panel {
   position:absolute;
   top:10px;
@@ -35,7 +35,6 @@ body { margin:0; font-family:Arial; }
   padding:6px;
 }
 
-/* Side Panel */
 #sidePanel {
   position:absolute;
   top:10px;
@@ -62,7 +61,6 @@ body { margin:0; font-family:Arial; }
   font-size:18px;
 }
 
-/* Legend */
 .legend {
   background:white;
   padding:10px;
@@ -106,42 +104,40 @@ body { margin:0; font-family:Arial; }
 <script src="locations.js"></script>
 
 <script>
-/* Enable Enter key for postal search */
+/* Enter key support */
 document.addEventListener("DOMContentLoaded", function(){
-  const input = document.getElementById("postalInput");
-  input.addEventListener("keydown", function(e){
-    if(e.key === "Enter"){
+  document.getElementById("postalInput").addEventListener("keydown", function(e){
+    if(e.key==="Enter"){
       e.preventDefault();
       searchPostal();
     }
   });
 });
-const map = L.map('map',{zoomControl:false}).setView([1.3521,103.8198],11);
-L.control.zoom({ position:'topright' }).addTo(map);
+
+const map=L.map('map',{zoomControl:false}).setView([1.3521,103.8198],11);
+L.control.zoom({position:'topright'}).addTo(map);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
 
 /* ---------------- Clinics ---------------- */
 
-const clinicCluster = L.markerClusterGroup();
-const bufferLayer = L.layerGroup();
-const searchLineLayer = L.layerGroup();
-const gridLayer = L.layerGroup().addTo(map);
-const industrialLayer = L.layerGroup().addTo(map);
-const restrictedLayer = L.layerGroup().addTo(map);
+const clinicCluster=L.markerClusterGroup();
+const bufferLayer=L.layerGroup();
+const searchLineLayer=L.layerGroup();
+const gridLayer=L.layerGroup().addTo(map);
+const industrialLayer=L.layerGroup().addTo(map);
+const restrictedLayer=L.layerGroup().addTo(map);
 
 locations.forEach(loc=>{
-  const marker = L.marker([loc.lat, loc.lng]);
-
-  let popup = `<b>${loc.address}</b><br>`;
+  const marker=L.marker([loc.lat,loc.lng]);
+  let popup=`<b>${loc.address}</b><br>`;
   loc.clinics.forEach(c=>{
-    popup += `${c.name}<br>${c.phone}<br><br>`;
+    popup+=`${c.name}<br>${c.phone}<br><br>`;
   });
-
   marker.bindPopup(popup);
   clinicCluster.addLayer(marker);
 
-  L.circle([loc.lat, loc.lng],{
+  L.circle([loc.lat,loc.lng],{
     radius:1000,
     color:'blue',
     weight:1,
@@ -167,6 +163,19 @@ fetch('restricted-zones.json')
   L.geoJSON(data,{style:{color:'black',weight:1,fillOpacity:0.25}})
   .addTo(restrictedLayer);
 });
+
+/* ---------------- Income Data ---------------- */
+
+let planningAreas=null;
+let incomeLookup=null;
+
+fetch('planning-areas.geojson')
+.then(r=>r.json())
+.then(data=>planningAreas=data);
+
+fetch('income-by-planning-area.json')
+.then(r=>r.json())
+.then(data=>incomeLookup=data);
 
 /* ---------------- Grid ---------------- */
 
@@ -231,6 +240,7 @@ function classify(count){
 }
 
 function searchPostal(){
+
   searchLineLayer.clearLayers();
   map.addLayer(searchLineLayer);
 
@@ -273,6 +283,25 @@ function searchPostal(){
       html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
     });
 
+    /* --------- Income Integration --------- */
+
+    if(planningAreas && incomeLookup){
+      const pt=turf.point([lng,lat]);
+
+      for(let feature of planningAreas.features){
+        if(turf.booleanPointInPolygon(pt,feature)){
+          const areaName=feature.properties.PLN_AREA_N.toUpperCase();
+          const income=incomeLookup[areaName];
+
+          html+=`<hr><h4>Planning Area</h4>${areaName}`;
+          if(income){
+            html+=`<br><b>Median Monthly HH Income:</b> $${Math.round(income).toLocaleString()}`;
+          }
+          break;
+        }
+      }
+    }
+
     document.getElementById('evaluationResult').innerHTML=html;
     document.getElementById('sidePanel').classList.add('open');
   });
@@ -298,8 +327,6 @@ legend.onAdd=function(){
   return div;
 };
 legend.addTo(map);
-
-/* ---------------- Layer Control ---------------- */
 
 L.control.layers(null,{
   "Clinics":clinicCluster,
