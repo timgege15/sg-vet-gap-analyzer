@@ -1,0 +1,242 @@
+{
+  "ANG MO KIO": {
+    "population": 162280,
+    "area_km2": 13.943,
+    "density_per_km2": 11639
+  },
+  "BEDOK": {
+    "population": 276990,
+    "area_km2": 21.734,
+    "density_per_km2": 12745
+  },
+  "BISHAN": {
+    "population": 87320,
+    "area_km2": 7.608,
+    "density_per_km2": 11477
+  },
+  "BOON LAY": {
+    "population": 40,
+    "area_km2": 8.283,
+    "density_per_km2": 5
+  },
+  "BUKIT BATOK": {
+    "population": 158030,
+    "area_km2": 11.14,
+    "density_per_km2": 14186
+  },
+  "BUKIT MERAH": {
+    "population": 151250,
+    "area_km2": 14.461,
+    "density_per_km2": 10459
+  },
+  "BUKIT PANJANG": {
+    "population": 138270,
+    "area_km2": 9.02,
+    "density_per_km2": 15329
+  },
+  "BUKIT TIMAH": {
+    "population": 77860,
+    "area_km2": 17.515,
+    "density_per_km2": 4445
+  },
+  "CHOA CHU KANG": {
+    "population": 192070,
+    "area_km2": 6.117,
+    "density_per_km2": 31398
+  },
+  "CLEMENTI": {
+    "population": 91990,
+    "area_km2": 9.521,
+    "density_per_km2": 9661
+  },
+  "DOWNTOWN CORE": {
+    "population": 3190,
+    "area_km2": 5.084,
+    "density_per_km2": 628
+  },
+  "GEYLANG": {
+    "population": 110110,
+    "area_km2": 9.645,
+    "density_per_km2": 11417
+  },
+  "HOUGANG": {
+    "population": 227560,
+    "area_km2": 13.933,
+    "density_per_km2": 16332
+  },
+  "JURONG EAST": {
+    "population": 78600,
+    "area_km2": 17.86,
+    "density_per_km2": 4401
+  },
+  "JURONG WEST": {
+    "population": 262730,
+    "area_km2": 14.68,
+    "density_per_km2": 17897
+  },
+  "KALLANG": {
+    "population": 101290,
+    "area_km2": 8.585,
+    "density_per_km2": 11799
+  },
+  "LIM CHU KANG": {
+    "population": 110,
+    "area_km2": 17.495,
+    "density_per_km2": 6
+  },
+  "MANDAI": {
+    "population": 2090,
+    "area_km2": 11.767,
+    "density_per_km2": 178
+  },
+  "MARINE PARADE": {
+    "population": 46220,
+    "area_km2": 6.133,
+    "density_per_km2": 7536
+  },
+  "MUSEUM": {
+    "population": 510,
+    "area_km2": 0.83,
+    "density_per_km2": 615
+  },
+  "NEWTON": {
+    "population": 8260,
+    "area_km2": 2.069,
+    "density_per_km2": 3993
+  },
+  "NORTH-EASTERN ISLANDS": {
+    "population": 50,
+    "area_km2": 67.251,
+    "density_per_km2": 1
+  },
+  "NOVENA": {
+    "population": 49330,
+    "area_km2": 8.968,
+    "density_per_km2": 5501
+  },
+  "ORCHARD": {
+    "population": 920,
+    "area_km2": 0.958,
+    "density_per_km2": 961
+  },
+  "OUTRAM": {
+    "population": 18340,
+    "area_km2": 1.373,
+    "density_per_km2": 13356
+  },
+  "PASIR RIS": {
+    "population": 147110,
+    "area_km2": 15.803,
+    "density_per_km2": 9309
+  },
+  "PAYA LEBAR": {
+    "population": 40,
+    "area_km2": 11.685,
+    "density_per_km2": 3
+  },
+  "PIONEER": {
+    "population": 80,
+    "area_km2": 12.22,
+    "density_per_km2": 7
+  },
+  "PUNGGOL": {
+    "population": 174450,
+    "area_km2": 9.374,
+    "density_per_km2": 18609
+  },
+  "QUEENSTOWN": {
+    "population": 95930,
+    "area_km2": 21.684,
+    "density_per_km2": 4424
+  },
+  "RIVER VALLEY": {
+    "population": 10070,
+    "area_km2": 1.476,
+    "density_per_km2": 6824
+  },
+  "ROCHOR": {
+    "population": 13120,
+    "area_km2": 1.588,
+    "density_per_km2": 8260
+  },
+  "SELETAR": {
+    "population": 300,
+    "area_km2": 10.849,
+    "density_per_km2": 28
+  },
+  "SEMBAWANG": {
+    "population": 102640,
+    "area_km2": 12.636,
+    "density_per_km2": 8123
+  },
+  "SENGKANG": {
+    "population": 249370,
+    "area_km2": 10.603,
+    "density_per_km2": 23519
+  },
+  "SERANGOON": {
+    "population": 116900,
+    "area_km2": 10.101,
+    "density_per_km2": 11574
+  },
+  "SINGAPORE RIVER": {
+    "population": 3260,
+    "area_km2": 0.958,
+    "density_per_km2": 3404
+  },
+  "SOUTHERN ISLANDS": {
+    "population": 1940,
+    "area_km2": 7.126,
+    "density_per_km2": 272
+  },
+  "SUNGEI KADUT": {
+    "population": 750,
+    "area_km2": 17.589,
+    "density_per_km2": 43
+  },
+  "TAMPINES": {
+    "population": 259900,
+    "area_km2": 20.795,
+    "density_per_km2": 12498
+  },
+  "TANGLIN": {
+    "population": 21810,
+    "area_km2": 7.552,
+    "density_per_km2": 2888
+  },
+  "TENGAH": {
+    "population": 10,
+    "area_km2": 7.363,
+    "density_per_km2": 1
+  },
+  "TOA PAYOH": {
+    "population": 121850,
+    "area_km2": 8.18,
+    "density_per_km2": 14896
+  },
+  "TUAS": {
+    "population": 70,
+    "area_km2": 47.695,
+    "density_per_km2": 1
+  },
+  "WESTERN ISLANDS": {
+    "population": 10,
+    "area_km2": 45.81,
+    "density_per_km2": 0
+  },
+  "WESTERN WATER CATCHMENT": {
+    "population": 640,
+    "area_km2": 69.748,
+    "density_per_km2": 9
+  },
+  "WOODLANDS": {
+    "population": 255130,
+    "area_km2": 13.613,
+    "density_per_km2": 18742
+  },
+  "YISHUN": {
+    "population": 221610,
+    "area_km2": 21.011,
+    "density_per_km2": 10547
+  }
+}
