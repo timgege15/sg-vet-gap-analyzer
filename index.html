@@ -12,92 +12,83 @@
 <script src="https://unpkg.com/leaflet.markercluster/dist/leaflet.markercluster.js"></script>
 
 <style>
-body { margin: 0; }
-#map { height: 100vh; }
+body { margin:0; }
+#map { height:100vh; }
 
 .radius-control {
-  position: absolute;
-  top: 85px;
-  left: 10px;
-  z-index: 2000;
-  background: white;
-  padding: 8px 12px;
-  border-radius: 8px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.25);
-  font-size: 13px;
+  position:absolute;
+  top:85px;
+  left:10px;
+  z-index:2000;
+  background:white;
+  padding:8px 12px;
+  border-radius:8px;
+  box-shadow:0 0 8px rgba(0,0,0,0.25);
+  font-size:13px;
 }
 
 .search-control {
-  position: absolute;
-  top: 155px;
-  left: 10px;
-  z-index: 2000;
-  background: white;
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.25);
-  font-size: 13px;
+  position:absolute;
+  top:155px;
+  left:10px;
+  z-index:2000;
+  background:white;
+  padding:10px;
+  border-radius:8px;
+  box-shadow:0 0 8px rgba(0,0,0,0.25);
+  font-size:13px;
 }
 
 .side-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 340px;
-  height: 100%;
-  background: white;
-  z-index: 1500;
-  padding: 15px;
-  box-shadow: -2px 0 6px rgba(0,0,0,0.2);
-  overflow-y: auto;
-  transition: transform 0.3s ease;
+  position:absolute;
+  top:0;
+  right:0;
+  width:340px;
+  height:100%;
+  background:white;
+  z-index:1500;
+  padding:15px;
+  box-shadow:-2px 0 6px rgba(0,0,0,0.2);
+  overflow-y:auto;
+  transition:transform 0.3s ease;
 }
-
-.side-panel.hidden {
-  transform: translateX(100%);
-}
+.side-panel.hidden { transform:translateX(100%); }
 
 .panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
 }
 
 .close-btn {
-  cursor: pointer;
-  font-weight: bold;
-  font-size: 18px;
-}
-
-.loading {
-  color: #888;
-  font-style: italic;
+  cursor:pointer;
+  font-weight:bold;
+  font-size:18px;
 }
 
 .score {
-  padding: 8px;
-  border-radius: 6px;
-  font-weight: bold;
-  margin-bottom: 10px;
+  padding:8px;
+  border-radius:6px;
+  font-weight:bold;
+  margin-bottom:10px;
 }
 .good { background:#d4edda; color:#155724; }
 .medium { background:#fff3cd; color:#856404; }
 .bad { background:#f8d7da; color:#721c24; }
 
 .legend {
-  background: white;
-  padding: 10px;
-  line-height: 18px;
-  border-radius: 6px;
-  box-shadow: 0 0 6px rgba(0,0,0,0.2);
-  font-size: 13px;
+  background:white;
+  padding:10px;
+  border-radius:6px;
+  box-shadow:0 0 6px rgba(0,0,0,0.2);
+  font-size:13px;
 }
 .legend i {
-  width: 14px;
-  height: 14px;
-  float: left;
-  margin-right: 8px;
-  opacity: 0.85;
+  width:14px;
+  height:14px;
+  float:left;
+  margin-right:8px;
+  opacity:0.9;
 }
 </style>
 </head>
@@ -135,7 +126,7 @@ body { margin: 0; }
 <script src="locations.js"></script>
 
 <script>
-const map = L.map('map').setView([1.3521, 103.8198], 11);
+const map = L.map('map').setView([1.3521,103.8198],11);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
 
 const clinicLayer = L.markerClusterGroup();
@@ -144,28 +135,24 @@ const industrialLayer = L.layerGroup();
 const restrictedLayer = L.layerGroup();
 const lineLayer = L.layerGroup().addTo(map);
 
-let siteMarker = null;
-let currentGridLayer = null;
+let siteMarker=null;
+let currentGridLayer=null;
 
-document.getElementById("postalInput").focus();
+/* === Clinic Markers === */
+locations.forEach(loc=>{
+  const marker=L.marker([loc.lat,loc.lng]);
 
-/* === Clinic Popups === */
-locations.forEach(loc => {
-
-  const marker = L.marker([loc.lat, loc.lng]);
-
-  let popup = `<b>${loc.address}</b><br><br>`;
+  let popup=`<b>${loc.address}</b><br><br>`;
   loc.clinics.forEach(c=>{
-    popup += `<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
+    popup+=`<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
   });
 
   marker.bindPopup(popup);
   clinicLayer.addLayer(marker);
 });
-
 map.addLayer(clinicLayer);
 
-/* === Grid Loading === */
+/* === Load Grid === */
 function loadGrid(radiusKm){
 
   if(currentGridLayer) map.removeLayer(currentGridLayer);
@@ -177,26 +164,28 @@ function loadGrid(radiusKm){
   fetch(`grid-${radiusKm}km.json`)
   .then(res=>res.json())
   .then(grid=>{
+
     const cellSize=0.0035;
 
     grid.forEach(cell=>{
-      let layer,color;
+
+      let color,layer;
 
       if(cell.type==="public_opportunity"){
+        color="#2ecc71";  // green
         layer=opportunityLayer;
-        color="#2ecc71";
       }
       else if(cell.type==="private_opportunity"){
+        color="#3498db";  // blue
         layer=opportunityLayer;
-        color="#3498db";
       }
       else if(cell.type==="industrial"){
-        layer=industrialLayer;
         color="orange";
+        layer=industrialLayer;
       }
       else if(cell.type==="restricted"){
-        layer=restrictedLayer;
         color="#444";
+        layer=restrictedLayer;
       }
       else return;
 
@@ -218,7 +207,8 @@ function loadGrid(radiusKm){
 
 loadGrid(1);
 
-document.getElementById("radiusSelect").addEventListener("change",function(){
+document.getElementById("radiusSelect")
+.addEventListener("change",function(){
   loadGrid(parseInt(this.value));
 });
 
@@ -229,31 +219,29 @@ function haversine(lat1,lon1,lat2,lon2){
   const dLat=toRad(lat2-lat1);
   const dLon=toRad(lon2-lon1);
   const a=Math.sin(dLat/2)**2+
-    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
+  Math.sin(dLon/2)**2;
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
-/* === Panel Toggle === */
 function togglePanel(){
   document.getElementById("resultsPanel").classList.toggle("hidden");
 }
 
-/* === Search === */
 function handleSearch(e){
   e.preventDefault();
   searchPostal();
 }
 
 function searchPostal(){
-
   const postal=document.getElementById("postalInput").value.trim();
   if(!/^\d{6}$/.test(postal)){
     alert("Enter valid 6-digit postal code.");
     return;
   }
 
-  document.getElementById("resultsContent").innerHTML="<div class='loading'>Searching...</div>";
   document.getElementById("resultsPanel").classList.remove("hidden");
+  document.getElementById("resultsContent").innerHTML="Searching...";
 
   fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
   .then(res=>res.json())
@@ -297,9 +285,7 @@ function evaluateSite(lat,lng){
   let html=`<div class="score ${scoreClass}">
   Competition within ${radius/1000}km: ${withinRadius}<br>
   ${scoreText}
-  </div>`;
-
-  html+="<h3>Nearest Clinics</h3>";
+  </div><h3>Nearest Clinics</h3>`;
 
   top3.forEach((item,i)=>{
     const d=item.distance;
@@ -319,9 +305,9 @@ function evaluateSite(lat,lng){
 /* === Layer Control === */
 L.control.layers(null,{
   "Clinics":clinicLayer,
-  "Public (HDB) Opportunity":opportunityLayer,
-  "Industrial / Business":industrialLayer,
-  "Restricted / Defence":restrictedLayer
+  "Opportunity":opportunityLayer,
+  "Industrial":industrialLayer,
+  "Restricted":restrictedLayer
 }).addTo(map);
 
 /* === Legend === */
@@ -329,10 +315,10 @@ const legend=L.control({position:'bottomright'});
 legend.onAdd=function(){
   const div=L.DomUtil.create('div','legend');
   div.innerHTML+="<b>Legend</b><br><br>";
-  div.innerHTML+='<i style="background:#2ecc71"></i> Public (HDB) Opportunity<br>';
-  div.innerHTML+='<i style="background:#3498db"></i> Private Opportunity<br>';
-  div.innerHTML+='<i style="background:orange"></i> Industrial / Business<br>';
-  div.innerHTML+='<i style="background:#444"></i> Restricted / Defence<br>';
+  div.innerHTML+='<i style="background:#2ecc71"></i> Opportunity (HDB dominant)<br>';
+  div.innerHTML+='<i style="background:#3498db"></i> Opportunity (Private dominant)<br>';
+  div.innerHTML+='<i style="background:orange"></i> Industrial<br>';
+  div.innerHTML+='<i style="background:#444"></i> Restricted<br>';
   return div;
 };
 legend.addTo(map);
