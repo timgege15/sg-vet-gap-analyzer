@@ -40,21 +40,30 @@ body { margin:0; font-family:Arial, sans-serif; }
 /* Side Panel */
 #sidePanel {
   position:absolute;
-  top:0;
-  right:0;
-  width:340px;
-  height:100%;
+  top:10px;
+  right:10px;
+  width:300px;
+  height:calc(100% - 20px);
   background:white;
   box-shadow:-3px 0 10px rgba(0,0,0,0.3);
   padding:20px;
   overflow:auto;
-  transform:translateX(100%);
+  transform:translateX(110%);
   transition:0.3s ease;
   z-index:1200;
 }
 
 #sidePanel.open {
   transform:translateX(0);
+}
+
+#closePanel {
+  position:absolute;
+  top:10px;
+  right:15px;
+  cursor:pointer;
+  font-weight:bold;
+  font-size:18px;
 }
 
 /* Legend */
@@ -72,7 +81,7 @@ body { margin:0; font-family:Arial, sans-serif; }
 <div id="map"></div>
 
 <div class="control-panel">
-  <b>Competition Radius</b>
+  <b>Competition Radius (Gap View)</b>
   <select id="radiusSelect">
     <option value="1">1 km</option>
     <option value="2">2 km</option>
@@ -93,6 +102,7 @@ body { margin:0; font-family:Arial, sans-serif; }
 </div>
 
 <div id="sidePanel">
+  <div id="closePanel" onclick="closePanel()">✕</div>
   <h3>Site Evaluation</h3>
   <div id="evaluationResult"></div>
 </div>
@@ -101,17 +111,13 @@ body { margin:0; font-family:Arial, sans-serif; }
 
 <script>
 const map = L.map('map',{zoomControl:false}).setView([1.3521,103.8198],11);
-
 L.control.zoom({ position:'topright' }).addTo(map);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:18
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
 
-/* ---------------- Clinics ---------------- */
-
+/* Clinics */
 const clinicCluster = L.markerClusterGroup();
-const bufferLayer = L.layerGroup();
+const bufferLayer = L.layerGroup().addTo(map);
 const searchLineLayer = L.layerGroup();
 
 locations.forEach(loc=>{
@@ -123,43 +129,35 @@ locations.forEach(loc=>{
   marker.bindPopup(popup);
   clinicCluster.addLayer(marker);
 
-  const circle = L.circle([loc.lat, loc.lng],{
+  L.circle([loc.lat, loc.lng],{
     radius:1000,
     color:'blue',
     weight:1,
     fillOpacity:0.05
-  });
-  bufferLayer.addLayer(circle);
+  }).addTo(bufferLayer);
 });
 
 map.addLayer(clinicCluster);
-map.addLayer(bufferLayer);
 
-/* ---------------- Zoning ---------------- */
-
+/* Zoning */
 const industrialLayer = L.layerGroup().addTo(map);
 const restrictedLayer = L.layerGroup().addTo(map);
 
 fetch('industrial-zones.json')
 .then(r=>r.json())
 .then(data=>{
-  L.geoJSON(data,{
-    style:{ color:'orange', weight:1, fillOpacity:0.15 }
-  }).addTo(industrialLayer);
+  L.geoJSON(data,{style:{color:'orange',weight:1,fillOpacity:0.15}}).addTo(industrialLayer);
 });
 
 fetch('restricted-zones.json')
 .then(r=>r.json())
 .then(data=>{
-  L.geoJSON(data,{
-    style:{ color:'black', weight:1, fillOpacity:0.25 }
-  }).addTo(restrictedLayer);
+  L.geoJSON(data,{style:{color:'black',weight:1,fillOpacity:0.25}}).addTo(restrictedLayer);
 });
 
-/* ---------------- Grid ---------------- */
-
-let grids = {};
-let activeGrid = L.layerGroup().addTo(map);
+/* Grid */
+let grids={};
+let activeGrid=L.layerGroup().addTo(map);
 
 Promise.all([
 fetch('grid-1km.json').then(r=>r.json()),
@@ -174,7 +172,6 @@ renderGrid();
 
 function renderGrid(){
 activeGrid.clearLayers();
-
 const r=document.getElementById('radiusSelect').value;
 const maxC=parseInt(document.getElementById('maxClinics').value);
 const minRes=parseFloat(document.getElementById('minRes').value)/100;
@@ -187,11 +184,7 @@ if(cell.residential_pct<minRes) return;
 L.rectangle([
 [cell.lat,cell.lng],
 [cell.lat+0.0035,cell.lng+0.0035]
-],{
-color:'green',
-weight:0.3,
-fillOpacity:0.4
-}).addTo(activeGrid);
+],{color:'green',weight:0.3,fillOpacity:0.4}).addTo(activeGrid);
 });
 }
 
@@ -199,8 +192,7 @@ document.getElementById('radiusSelect').onchange=renderGrid;
 document.getElementById('maxClinics').oninput=renderGrid;
 document.getElementById('minRes').oninput=renderGrid;
 
-/* ---------------- Postal Search ---------------- */
-
+/* Distance */
 function haversine(a,b,c,d){
 const R=6371000;
 const toRad=x=>x*Math.PI/180;
@@ -210,6 +202,13 @@ const x=Math.sin(dLat/2)**2+
 Math.cos(toRad(a))*Math.cos(toRad(c))*
 Math.sin(dLon/2)**2;
 return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+function classify(count){
+if(count===0) return "White Space";
+if(count===1) return "Very Low Competition";
+if(count<=3) return "Moderate Competition";
+return "High Competition";
 }
 
 function searchPostal(){
@@ -225,24 +224,29 @@ if(!data.results.length) return;
 
 const lat=parseFloat(data.results[0].LATITUDE);
 const lng=parseFloat(data.results[0].LONGITUDE);
-
 map.setView([lat,lng],15);
-
 L.marker([lat,lng]).addTo(map);
 
+let counts={1:0,2:0,3:0};
 let distances=locations.map(loc=>{
-return {...loc,dist:haversine(lat,lng,loc.lat,loc.lng)};
+const d=haversine(lat,lng,loc.lat,loc.lng);
+if(d<=1000) counts[1]++;
+if(d<=2000) counts[2]++;
+if(d<=3000) counts[3]++;
+return {...loc,dist:d};
 });
 
 distances.sort((a,b)=>a.dist-b.dist);
 
-let html="<h4>Nearest 3 Clinics</h4>";
+let html="<h4>Competition Overview</h4>";
+[1,2,3].forEach(r=>{
+html+=`${r}km: <b>${counts[r]}</b> clinics — ${classify(counts[r])}<br>`;
+});
+
+html+="<hr><h4>Nearest 3 Clinics</h4>";
 
 distances.slice(0,3).forEach(d=>{
-L.polyline([[lat,lng],[d.lat,d.lng]],{
-color:'red'
-}).addTo(searchLineLayer);
-
+L.polyline([[lat,lng],[d.lat,d.lng]],{color:'red'}).addTo(searchLineLayer);
 html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
 });
 
@@ -251,10 +255,12 @@ document.getElementById('sidePanel').classList.add('open');
 });
 }
 
-/* ---------------- Legend ---------------- */
+function closePanel(){
+document.getElementById('sidePanel').classList.remove('open');
+}
 
-const legend = L.control({position:"bottomleft"});
-
+/* Legend */
+const legend=L.control({position:"bottomleft"});
 legend.onAdd=function(){
 const div=L.DomUtil.create("div","legend");
 div.innerHTML=`
@@ -263,14 +269,13 @@ div.innerHTML=`
 <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
 <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
 <span style="color:blue;">◯</span> 1km Buffer<br>
-<span style="color:red;">—</span> Site Evaluation Lines
+<span style="color:red;">—</span> Evaluation Lines
 `;
 return div;
 };
 legend.addTo(map);
 
-/* ---------------- Layer Control ---------------- */
-
+/* Layers */
 L.control.layers(null,{
 "Clinics":clinicCluster,
 "1km Buffers":bufferLayer,
@@ -278,7 +283,6 @@ L.control.layers(null,{
 "Industrial":industrialLayer,
 "Restricted":restrictedLayer
 },{position:'topright'}).addTo(map);
-
 </script>
 </body>
 </html>
