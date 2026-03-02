@@ -15,16 +15,30 @@
 body { margin: 0; }
 #map { height: 100vh; }
 
-.control-box {
+.radius-control {
   position: absolute;
-  top: 10px;
-  left: 50px;
-  z-index: 1000;
+  top: 70px;
+  left: 10px;
+  z-index: 2000;
   background: white;
   padding: 8px 12px;
-  border-radius: 6px;
-  box-shadow: 0 0 6px rgba(0,0,0,0.2);
-  font-size: 14px;
+  border-radius: 8px;
+  box-shadow: 0 0 8px rgba(0,0,0,0.25);
+  font-size: 13px;
+}
+
+.popup-title {
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.clinic-entry {
+  margin-bottom: 6px;
+}
+
+.clinic-phone {
+  color: #2b7bff;
+  font-size: 13px;
 }
 
 .legend {
@@ -49,7 +63,7 @@ body { margin: 0; }
 
 <div id="map"></div>
 
-<div class="control-box">
+<div class="radius-control">
   Competition Radius:
   <select id="radiusSelect">
     <option value="1">1km</option>
@@ -76,10 +90,30 @@ const restrictedLayer = L.layerGroup();
 
 let currentGridLayer = null;
 
-/* Load Clinics */
+/* ============================
+   LOAD CLINICS WITH POPUPS
+============================ */
 
 locations.forEach(loc => {
-  clinicLayer.addLayer(L.marker([loc.lat, loc.lng]));
+
+  const marker = L.marker([loc.lat, loc.lng]);
+
+  let popupContent = `
+    <div class="popup-title">${loc.address}</div>
+  `;
+
+  loc.clinics.forEach(clinic => {
+    popupContent += `
+      <div class="clinic-entry">
+        <b>${clinic.name}</b><br>
+        <span class="clinic-phone">📞 ${clinic.phone}</span>
+      </div>
+    `;
+  });
+
+  marker.bindPopup(popupContent);
+  clinicLayer.addLayer(marker);
+
   bufferLayer.addLayer(
     L.circle([loc.lat, loc.lng], {
       radius: 1000,
@@ -93,7 +127,9 @@ locations.forEach(loc => {
 map.addLayer(clinicLayer);
 map.addLayer(bufferLayer);
 
-/* Load Grid */
+/* ============================
+   LOAD GRID
+============================ */
 
 function loadGrid(radiusKm) {
 
@@ -151,16 +187,12 @@ function loadGrid(radiusKm) {
     });
 }
 
-/* Initial Load */
 loadGrid(1);
 
-/* Dropdown Event */
 document.getElementById("radiusSelect")
   .addEventListener("change", function() {
     loadGrid(this.value);
   });
-
-/* Controls */
 
 L.control.layers(null, {
   "Clinics": clinicLayer,
@@ -169,8 +201,6 @@ L.control.layers(null, {
   "Industrial / Business (Excluded)": industrialLayer,
   "Restricted / Defence (Excluded)": restrictedLayer
 }).addTo(map);
-
-/* Legend */
 
 const legend = L.control({position: 'bottomright'});
 
