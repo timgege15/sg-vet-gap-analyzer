@@ -138,21 +138,19 @@ const lineLayer = L.layerGroup().addTo(map);
 let siteMarker=null;
 let currentGridLayer=null;
 
-/* === Clinic Markers === */
+/* Clinics */
 locations.forEach(loc=>{
   const marker=L.marker([loc.lat,loc.lng]);
-
   let popup=`<b>${loc.address}</b><br><br>`;
   loc.clinics.forEach(c=>{
     popup+=`<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
   });
-
   marker.bindPopup(popup);
   clinicLayer.addLayer(marker);
 });
 map.addLayer(clinicLayer);
 
-/* === Load Grid === */
+/* Load Grid with CACHE BUSTING */
 function loadGrid(radiusKm){
 
   if(currentGridLayer) map.removeLayer(currentGridLayer);
@@ -161,22 +159,21 @@ function loadGrid(radiusKm){
   industrialLayer.clearLayers();
   restrictedLayer.clearLayers();
 
-  fetch(`grid-${radiusKm}km.json`)
+  fetch(`grid-${radiusKm}km.json?v=${Date.now()}`)
   .then(res=>res.json())
   .then(grid=>{
 
     const cellSize=0.0035;
 
     grid.forEach(cell=>{
-
       let color,layer;
 
       if(cell.type==="public_opportunity"){
-        color="#2ecc71";  // green
+        color="#2ecc71";
         layer=opportunityLayer;
       }
       else if(cell.type==="private_opportunity"){
-        color="#3498db";  // blue
+        color="#3498db";
         layer=opportunityLayer;
       }
       else if(cell.type==="industrial"){
@@ -212,7 +209,7 @@ document.getElementById("radiusSelect")
   loadGrid(parseInt(this.value));
 });
 
-/* === Distance === */
+/* Distance */
 function haversine(lat1,lon1,lat2,lon2){
   const R=6371000;
   const toRad=x=>x*Math.PI/180;
@@ -302,7 +299,7 @@ function evaluateSite(lat,lng){
   document.getElementById("resultsContent").innerHTML=html;
 }
 
-/* === Layer Control === */
+/* Layer Control */
 L.control.layers(null,{
   "Clinics":clinicLayer,
   "Opportunity":opportunityLayer,
@@ -310,7 +307,7 @@ L.control.layers(null,{
   "Restricted":restrictedLayer
 }).addTo(map);
 
-/* === Legend === */
+/* Legend */
 const legend=L.control({position:'bottomright'});
 legend.onAdd=function(){
   const div=L.DomUtil.create('div','legend');
