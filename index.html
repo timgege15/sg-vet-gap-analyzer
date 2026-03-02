@@ -15,51 +15,70 @@
 body { margin:0; }
 #map { height:100vh; }
 
-#searchBox {
+/* Search Box */
+#searchBox{
   position:absolute;
   top:10px;
   left:50px;
   z-index:1000;
   background:white;
-  padding:8px;
+  padding:8px 10px;
   border-radius:6px;
-  box-shadow:0 0 6px rgba(0,0,0,0.2);
+  box-shadow:0 2px 6px rgba(0,0,0,0.2);
 }
 
-#sidePanel {
+/* Sliding Panel */
+#sidePanel{
   position:absolute;
-  right:0;
   top:0;
-  width:300px;
+  right:-350px;
+  width:350px;
   height:100%;
   background:white;
-  box-shadow:-3px 0 6px rgba(0,0,0,0.2);
-  padding:15px;
+  box-shadow:-4px 0 12px rgba(0,0,0,0.2);
+  padding:20px;
+  transition: right 0.3s ease;
   overflow-y:auto;
   z-index:1000;
-  display:none;
 }
 
-#togglePanel {
+#sidePanel.open{
+  right:0;
+}
+
+/* Collapse Arrow */
+#panelToggle{
   position:absolute;
-  right:310px;
-  top:10px;
-  z-index:1001;
+  top:50%;
+  right:350px;
+  transform:translateY(-50%);
+  width:30px;
+  height:60px;
   background:white;
-  padding:5px 10px;
-  border-radius:6px;
+  border-radius:6px 0 0 6px;
+  box-shadow:-2px 0 6px rgba(0,0,0,0.2);
   cursor:pointer;
-  box-shadow:0 0 6px rgba(0,0,0,0.2);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:18px;
+  z-index:1001;
+  transition:right 0.3s ease;
 }
 
-.legend {
+#panelToggle.closed{
+  right:0;
+}
+
+/* Legend */
+.legend{
   background:white;
   padding:10px;
   border-radius:6px;
-  box-shadow:0 0 6px rgba(0,0,0,0.2);
+  box-shadow:0 2px 6px rgba(0,0,0,0.2);
   font-size:13px;
 }
-.legend i {
+.legend i{
   width:14px;
   height:14px;
   float:left;
@@ -76,127 +95,120 @@ body { margin:0; }
   <button onclick="searchPostal()">Search</button>
 </div>
 
-<div id="togglePanel" onclick="togglePanel()">Show Evaluation</div>
-
 <div id="sidePanel">
-  <h3>Site Evaluation</h3>
+  <h2>Site Evaluation</h2>
   <div id="evaluationContent"></div>
 </div>
+
+<div id="panelToggle" class="closed" onclick="togglePanel()">❯</div>
 
 <script src="locations.js"></script>
 
 <script>
 
-const map = L.map('map').setView([1.3521,103.8198],11);
+const map=L.map('map').setView([1.3521,103.8198],11);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:18
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
 
-/* ---------------- CLINICS ---------------- */
+/* Clinics */
 
-const clinicLayer = L.markerClusterGroup();
+const clinicLayer=L.markerClusterGroup();
 locations.forEach(loc=>{
-  const marker = L.marker([loc.lat,loc.lng]);
-  let popup = `<b>${loc.address}</b><br><br>`;
+  const marker=L.marker([loc.lat,loc.lng]);
+  let popup=`<b>${loc.address}</b><br><br>`;
   loc.clinics.forEach(c=>{
-    popup += `<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
+    popup+=`<b>${c.name}</b><br>📞 ${c.phone}<br><br>`;
   });
   marker.bindPopup(popup);
   clinicLayer.addLayer(marker);
 });
 map.addLayer(clinicLayer);
 
-/* ---------------- OPPORTUNITY ---------------- */
+/* Opportunity Grid */
 
-const opportunityLayer = L.layerGroup();
-const cellSize = 0.0035;
+const opportunityLayer=L.layerGroup();
+const cellSize=0.0035;
 
 fetch("grid-1km.json?v="+Date.now())
 .then(res=>res.json())
 .then(grid=>{
   grid.forEach(cell=>{
-    let color = cell.type==="public_opportunity"
-      ? "#2ecc71"
-      : "#3498db";
+    let color;
+    if(cell.type==="public_opportunity") color="#2ecc71";
+    else if(cell.type==="private_opportunity") color="#3498db";
+    else return;
 
-    L.rectangle(
-      [[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
-      {color,weight:0.2,fillColor:color,fillOpacity:0.35}
-    ).addTo(opportunityLayer);
+    L.rectangle([[cell.lat,cell.lng],[cell.lat+cellSize,cell.lng+cellSize]],
+    {color,weight:0.2,fillColor:color,fillOpacity:0.35})
+    .addTo(opportunityLayer);
   });
 });
 map.addLayer(opportunityLayer);
 
-/* ---------------- INDUSTRIAL ---------------- */
+/* Industrial */
 
-const industrialLayer = L.geoJSON(null,{
-  style:{color:"orange",weight:0.5,fillOpacity:0.3}
-});
+const industrialLayer=L.geoJSON(null,{style:{color:"orange",weight:0.5,fillOpacity:0.3}});
 fetch("industrial-zones.json?v="+Date.now())
 .then(res=>res.json())
 .then(data=>{
   industrialLayer.addData(data);
-  map.addLayer(industrialLayer);
 });
+map.addLayer(industrialLayer);
 
-/* ---------------- RESTRICTED ---------------- */
+/* Restricted */
 
-const restrictedLayer = L.geoJSON(null,{
-  style:{color:"#444",weight:0.5,fillOpacity:0.35}
-});
+const restrictedLayer=L.geoJSON(null,{style:{color:"#444",weight:0.5,fillOpacity:0.35}});
 fetch("restricted-zones.json?v="+Date.now())
 .then(res=>res.json())
 .then(data=>{
   restrictedLayer.addData(data);
-  map.addLayer(restrictedLayer);
 });
+map.addLayer(restrictedLayer);
 
-/* ---------------- LAYER CONTROL ---------------- */
+/* Layers */
 
 L.control.layers(null,{
-  "Clinics": clinicLayer,
-  "Opportunity": opportunityLayer,
-  "Industrial": industrialLayer,
-  "Restricted": restrictedLayer
+  "Clinics":clinicLayer,
+  "Opportunity":opportunityLayer,
+  "Industrial":industrialLayer,
+  "Restricted":restrictedLayer
 }).addTo(map);
 
-/* ---------------- LEGEND ---------------- */
+/* Legend */
 
-const legend = L.control({position:'bottomright'});
+const legend=L.control({position:'bottomright'});
 legend.onAdd=function(){
   const div=L.DomUtil.create('div','legend');
-  div.innerHTML += "<b>Legend</b><br><br>";
-  div.innerHTML += '<i style="background:#2ecc71"></i> HDB-Dominant Opportunity<br>';
-  div.innerHTML += '<i style="background:#3498db"></i> Private-Dominant Opportunity<br>';
-  div.innerHTML += '<i style="background:orange"></i> Industrial<br>';
-  div.innerHTML += '<i style="background:#444"></i> Restricted<br>';
+  div.innerHTML+="<b>Legend</b><br><br>";
+  div.innerHTML+='<i style="background:#2ecc71"></i> HDB-Dominant Opportunity<br>';
+  div.innerHTML+='<i style="background:#3498db"></i> Private-Dominant Opportunity<br>';
+  div.innerHTML+='<i style="background:orange"></i> Industrial<br>';
+  div.innerHTML+='<i style="background:#444"></i> Restricted<br>';
   return div;
 };
 legend.addTo(map);
 
-/* ---------------- POSTAL SEARCH ---------------- */
-
-let searchMarker = null;
-let lineLayer = L.layerGroup().addTo(map);
+/* Sliding Panel Logic */
 
 function togglePanel(){
   const panel=document.getElementById("sidePanel");
-  const toggle=document.getElementById("togglePanel");
+  const toggle=document.getElementById("panelToggle");
 
-  if(panel.style.display==="none"){
-    panel.style.display="block";
-    toggle.innerText="Hide Evaluation";
+  if(panel.classList.contains("open")){
+    panel.classList.remove("open");
+    toggle.classList.add("closed");
+    toggle.innerHTML="❯";
   }else{
-    panel.style.display="none";
-    toggle.innerText="Show Evaluation";
+    panel.classList.add("open");
+    toggle.classList.remove("closed");
+    toggle.innerHTML="❮";
   }
 }
 
-function formatDistance(m){
-  if(m<1000) return Math.round(m)+" m";
-  return (m/1000).toFixed(2)+" km";
-}
+/* Search Logic */
+
+let searchMarker=null;
+let lineLayer=L.layerGroup().addTo(map);
 
 function haversine(lat1,lon1,lat2,lon2){
   const R=6371000;
@@ -209,49 +221,65 @@ function haversine(lat1,lon1,lat2,lon2){
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
+function formatDistance(m){
+  if(m<1000) return Math.round(m)+" m";
+  return (m/1000).toFixed(2)+" km";
+}
+
 function searchPostal(){
   const postal=document.getElementById("postalInput").value.trim();
-  if(postal.length!==6) return alert("Enter 6-digit postal code");
+  if(postal.length!==6) return alert("Enter 6-digit postal");
 
   fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
   .then(res=>res.json())
   .then(data=>{
     if(data.found===0) return alert("Postal not found");
 
-    const result=data.results[0];
-    const lat=parseFloat(result.LATITUDE);
-    const lng=parseFloat(result.LONGITUDE);
+    const r=data.results[0];
+    const lat=parseFloat(r.LATITUDE);
+    const lng=parseFloat(r.LONGITUDE);
 
     if(searchMarker) map.removeLayer(searchMarker);
     lineLayer.clearLayers();
 
-    searchMarker=L.marker([lat,lng],{color:"red"}).addTo(map);
+    searchMarker=L.marker([lat,lng]).addTo(map);
     map.setView([lat,lng],15);
 
+    let count1=0,count2=0,count3=0;
+
     const distances=locations.map(loc=>{
-      return {
-        ...loc,
-        distance:haversine(lat,lng,loc.lat,loc.lng)
-      };
+      const d=haversine(lat,lng,loc.lat,loc.lng);
+      if(d<=1000) count1++;
+      if(d<=2000) count2++;
+      if(d<=3000) count3++;
+      return {...loc,distance:d};
     });
 
     distances.sort((a,b)=>a.distance-b.distance);
-
     const nearest=distances.slice(0,3);
 
-    let html="<b>Nearest 3 Clinics</b><br><br>";
+    let competition;
+    if(count1===0) competition="<span style='color:green'><b>Strong Opportunity</b></span>";
+    else if(count1<=2) competition="<span style='color:orange'><b>Moderate Competition</b></span>";
+    else competition="<span style='color:red'><b>High Competition</b></span>";
+
+    let html="<b>Competition Summary</b><br><br>";
+    html+=`Within 1km: ${count1} clinics<br>`;
+    html+=`Within 2km: ${count2} clinics<br>`;
+    html+=`Within 3km: ${count3} clinics<br><br>`;
+    html+=competition+"<br><br>";
+    html+="<b>Nearest 3 Clinics</b><br><br>";
 
     nearest.forEach(n=>{
-      html+=`<b>${n.clinics[0].name}</b><br>
-             ${formatDistance(n.distance)}<br><br>`;
-
-      L.polyline([[lat,lng],[n.lat,n.lng]],
-        {color:"red",weight:2}).addTo(lineLayer);
+      html+=`<b>${n.clinics[0].name}</b><br>${formatDistance(n.distance)}<br><br>`;
+      L.polyline([[lat,lng],[n.lat,n.lng]],{color:"red",weight:2}).addTo(lineLayer);
     });
 
     document.getElementById("evaluationContent").innerHTML=html;
-    document.getElementById("sidePanel").style.display="block";
-    document.getElementById("togglePanel").innerText="Hide Evaluation";
+
+    if(!document.getElementById("sidePanel").classList.contains("open")){
+      togglePanel();
+    }
   });
 }
 
