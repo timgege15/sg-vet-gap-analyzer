@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8" />
+<meta charset="utf-8"/>
 <title>SG Vet Gap Analyzer</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
@@ -18,21 +18,28 @@ body { margin:0; }
 /* Competition Controls */
 .control-box {
   position:absolute;
-  top:60px;   /* push below zoom */
+  top:10px;
   left:10px;
   background:white;
   padding:12px;
   border-radius:8px;
   box-shadow:0 2px 6px rgba(0,0,0,0.2);
   z-index:1000;
+  width:220px;
   font-size:14px;
-  width:200px;
 }
 
-.control-box select,
-.control-box input {
-  width:100%;
-  margin-top:6px;
+/* Toggle Button */
+#togglePanel {
+  position:absolute;
+  bottom:20px;
+  right:20px;
+  background:white;
+  padding:8px 14px;
+  border-radius:6px;
+  cursor:pointer;
+  box-shadow:0 2px 6px rgba(0,0,0,0.3);
+  z-index:1300;
 }
 
 /* Side Panel */
@@ -43,28 +50,15 @@ body { margin:0; }
   width:320px;
   height:100%;
   background:white;
-  box-shadow:-2px 0 6px rgba(0,0,0,0.2);
-  padding:15px;
+  box-shadow:-2px 0 6px rgba(0,0,0,0.3);
+  padding:20px;
   overflow:auto;
   transform:translateX(100%);
-  transition:0.3s;
+  transition:0.3s ease;
   z-index:1200;
 }
-
 #sidePanel.open {
   transform:translateX(0);
-}
-
-#togglePanel {
-  position:absolute;
-  top:10px;
-  right:10px;
-  background:white;
-  padding:6px 10px;
-  border-radius:6px;
-  cursor:pointer;
-  box-shadow:0 2px 6px rgba(0,0,0,0.2);
-  z-index:1300;
 }
 </style>
 </head>
@@ -73,43 +67,47 @@ body { margin:0; }
 <div id="map"></div>
 
 <div class="control-box">
-  <b>Competition Radius</b>
-  <select id="radiusSelect">
-    <option value="1">1 km</option>
-    <option value="2">2 km</option>
-    <option value="3">3 km</option>
-  </select>
+<b>Competition Radius</b>
+<select id="radiusSelect">
+<option value="1">1 km</option>
+<option value="2">2 km</option>
+<option value="3">3 km</option>
+</select><br><br>
 
-  <b>Max Clinics</b>
-  <input type="number" id="maxClinics" value="1" min="0">
+<b>Max Clinics</b>
+<input type="number" id="maxClinics" value="1"><br><br>
 
-  <b>Min Residential %</b>
-  <input type="number" id="minRes" value="40" min="0" max="100">
+<b>Min Residential %</b>
+<input type="number" id="minRes" value="40">
 </div>
 
 <div id="togglePanel">Site Evaluation</div>
 
 <div id="sidePanel">
-  <h3>Postal Search</h3>
-  <input type="text" id="postalInput" placeholder="Enter 6-digit postal"/>
-  <button onclick="searchPostal()">Search</button>
-  <div id="result"></div>
+<h3>Postal Search</h3>
+<input type="text" id="postalInput" placeholder="Enter 6-digit postal">
+<button onclick="searchPostal()">Search</button>
+<div id="result"></div>
 </div>
 
 <script src="locations.js"></script>
 
 <script>
-const map = L.map('map').setView([1.3521,103.8198],11);
+const map = L.map('map', {
+  zoomControl:false
+}).setView([1.3521,103.8198],11);
+
+L.control.zoom({ position:'topright' }).addTo(map);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:18,
-  attribution:'© OpenStreetMap'
+  maxZoom:18
 }).addTo(map);
 
-/* ---------------- Clinic Markers ---------------- */
+/* ---------------- CLINICS ---------------- */
 
 const clinicCluster = L.markerClusterGroup();
 const bufferLayer = L.layerGroup();
+const searchLineLayer = L.layerGroup();
 
 locations.forEach(loc=>{
   const marker = L.marker([loc.lat, loc.lng]);
@@ -134,108 +132,138 @@ locations.forEach(loc=>{
 
 map.addLayer(clinicCluster);
 
-/* ---------------- Grid Layers ---------------- */
+/* ---------------- INDUSTRIAL & RESTRICTED ---------------- */
+
+const industrialLayer = L.layerGroup();
+const restrictedLayer = L.layerGroup();
+
+fetch('industrial-zones.json')
+.then(r=>r.json())
+.then(data=>{
+  L.geoJSON(data,{
+    style:{ color:'orange', weight:1, fillOpacity:0.2 }
+  }).addTo(industrialLayer);
+});
+
+fetch('restricted-zones.json')
+.then(r=>r.json())
+.then(data=>{
+  L.geoJSON(data,{
+    style:{ color:'black', weight:1, fillOpacity:0.3 }
+  }).addTo(restrictedLayer);
+});
+
+/* ---------------- GRID ---------------- */
 
 let grids = {};
-let activeGridLayer = L.layerGroup().addTo(map);
+let activeGrid = L.layerGroup().addTo(map);
 
 Promise.all([
-  fetch('grid-1km.json').then(r=>r.json()),
-  fetch('grid-2km.json').then(r=>r.json()),
-  fetch('grid-3km.json').then(r=>r.json())
+fetch('grid-1km.json').then(r=>r.json()),
+fetch('grid-2km.json').then(r=>r.json()),
+fetch('grid-3km.json').then(r=>r.json())
 ]).then(([g1,g2,g3])=>{
-  grids[1]=g1;
-  grids[2]=g2;
-  grids[3]=g3;
-  renderGrid();
+grids[1]=g1;
+grids[2]=g2;
+grids[3]=g3;
+renderGrid();
 });
 
 function renderGrid(){
-  activeGridLayer.clearLayers();
+activeGrid.clearLayers();
 
-  const r = document.getElementById('radiusSelect').value;
-  const maxC = parseInt(document.getElementById('maxClinics').value);
-  const minRes = parseFloat(document.getElementById('minRes').value)/100;
+const r=document.getElementById('radiusSelect').value;
+const maxC=parseInt(document.getElementById('maxClinics').value);
+const minRes=parseFloat(document.getElementById('minRes').value)/100;
 
-  grids[r].forEach(cell=>{
-    if(cell.dominant_type !== "residential") return;
-    if(cell.clinic_count > maxC) return;
-    if(cell.residential_pct < minRes) return;
+grids[r].forEach(cell=>{
+if(cell.dominant_type!=="residential") return;
+if(cell.clinic_count>maxC) return;
+if(cell.residential_pct<minRes) return;
 
-    L.rectangle([
-      [cell.lat, cell.lng],
-      [cell.lat+0.0035, cell.lng+0.0035]
-    ],{
-      color:'green',
-      weight:0.3,
-      fillOpacity:0.4
-    }).addTo(activeGridLayer);
-  });
+L.rectangle([
+[cell.lat,cell.lng],
+[cell.lat+0.0035,cell.lng+0.0035]
+],{
+color:'green',
+weight:0.3,
+fillOpacity:0.4
+}).addTo(activeGrid);
+});
 }
 
-document.getElementById('radiusSelect').addEventListener('change',renderGrid);
-document.getElementById('maxClinics').addEventListener('input',renderGrid);
-document.getElementById('minRes').addEventListener('input',renderGrid);
+document.getElementById('radiusSelect').onchange=renderGrid;
+document.getElementById('maxClinics').oninput=renderGrid;
+document.getElementById('minRes').oninput=renderGrid;
 
-/* ---------------- Postal Search ---------------- */
+/* ---------------- POSTAL SEARCH ---------------- */
 
 function haversine(a,b,c,d){
-  const R=6371000;
-  const toRad=x=>x*Math.PI/180;
-  const dLat=toRad(c-a);
-  const dLon=toRad(d-b);
-  const x=Math.sin(dLat/2)**2+
-    Math.cos(toRad(a))*Math.cos(toRad(c))*
-    Math.sin(dLon/2)**2;
-  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+const R=6371000;
+const toRad=x=>x*Math.PI/180;
+const dLat=toRad(c-a);
+const dLon=toRad(d-b);
+const x=Math.sin(dLat/2)**2+
+Math.cos(toRad(a))*Math.cos(toRad(c))*
+Math.sin(dLon/2)**2;
+return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
 
 function searchPostal(){
-  const postal=document.getElementById('postalInput').value;
-  fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
-  .then(r=>r.json())
-  .then(data=>{
-    if(!data.results.length) return;
+searchLineLayer.clearLayers();
 
-    const lat=parseFloat(data.results[0].LATITUDE);
-    const lng=parseFloat(data.results[0].LONGITUDE);
+const postal=document.getElementById('postalInput').value;
 
-    map.setView([lat,lng],15);
-    L.marker([lat,lng]).addTo(map);
+fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${postal}&returnGeom=Y&getAddrDetails=Y`)
+.then(r=>r.json())
+.then(data=>{
+if(!data.results.length) return;
 
-    let distances=locations.map(loc=>{
-      return {
-        ...loc,
-        dist:haversine(lat,lng,loc.lat,loc.lng)
-      };
-    });
+const lat=parseFloat(data.results[0].LATITUDE);
+const lng=parseFloat(data.results[0].LONGITUDE);
 
-    distances.sort((a,b)=>a.dist-b.dist);
+map.setView([lat,lng],15);
 
-    let html="<h4>Nearest Clinics</h4>";
-    distances.slice(0,3).forEach(d=>{
-      html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
-    });
+const siteMarker=L.marker([lat,lng]).addTo(map);
 
-    document.getElementById('result').innerHTML=html;
-  });
+let distances=locations.map(loc=>{
+return {...loc,dist:haversine(lat,lng,loc.lat,loc.lng)};
+});
+
+distances.sort((a,b)=>a.dist-b.dist);
+
+let html="<h4>Nearest 3 Clinics</h4>";
+
+distances.slice(0,3).forEach(d=>{
+L.polyline([[lat,lng],[d.lat,d.lng]],{
+color:'red'
+}).addTo(searchLineLayer);
+
+html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
+});
+
+map.addLayer(searchLineLayer);
+
+document.getElementById('result').innerHTML=html;
+});
 }
 
-/* ---------------- Panel Toggle ---------------- */
+/* ---------------- PANEL TOGGLE ---------------- */
 
 document.getElementById('togglePanel').onclick=function(){
-  document.getElementById('sidePanel').classList.toggle('open');
+document.getElementById('sidePanel').classList.toggle('open');
 };
 
-/* ---------------- Layer Control ---------------- */
+/* ---------------- LAYER CONTROL ---------------- */
 
 L.control.layers(null,{
-  "Clinics":clinicCluster,
-  "1km Buffers":bufferLayer,
-  "Opportunity Grid":activeGridLayer
-}).addTo(map);
+"Clinics":clinicCluster,
+"1km Buffers":bufferLayer,
+"Opportunity Grid":activeGrid,
+"Industrial":industrialLayer,
+"Restricted":restrictedLayer
+},{position:'topright'}).addTo(map);
 
 </script>
-
 </body>
 </html>
