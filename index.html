@@ -60,6 +60,14 @@ body { margin:0; font-family:Arial; }
   font-weight:bold;
   font-size:18px;
 }
+
+.legend {
+  background:white;
+  padding:10px;
+  border-radius:6px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.3);
+  line-height:20px;
+}
 </style>
 </head>
 <body>
@@ -67,6 +75,21 @@ body { margin:0; font-family:Arial; }
 <div id="map"></div>
 
 <div class="control-panel">
+  <b>Competition Radius</b>
+  <select id="radiusSelect">
+    <option value="1" selected>1 km</option>
+    <option value="2">2 km</option>
+    <option value="3">3 km</option>
+  </select>
+
+  <b>Max Clinics Within Radius</b>
+  <input type="number" id="maxClinics" value="0">
+
+  <b>Min Residential %</b>
+  <input type="number" id="minRes" value="70">
+
+  <hr>
+
   <b>Evaluate Site (Postal Code)</b>
   <input type="text" id="postalInput" placeholder="Enter 6-digit postal">
   <button onclick="searchPostal()">Evaluate</button>
@@ -81,13 +104,70 @@ body { margin:0; font-family:Arial; }
 <script src="locations.js"></script>
 
 <script>
+/* Enter key support */
+document.addEventListener("DOMContentLoaded", function(){
+  document.getElementById("postalInput").addEventListener("keydown", function(e){
+    if(e.key==="Enter"){
+      e.preventDefault();
+      searchPostal();
+    }
+  });
+});
 
-const map=L.map('map').setView([1.3521,103.8198],11);
+const map=L.map('map',{zoomControl:false}).setView([1.3521,103.8198],11);
+L.control.zoom({position:'topright'}).addTo(map);
+
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
+
+/* ---------------- Clinics ---------------- */
+
+const clinicCluster=L.markerClusterGroup();
+const bufferLayer=L.layerGroup();
+const searchLineLayer=L.layerGroup();
+const gridLayer=L.layerGroup().addTo(map);
+const industrialLayer=L.layerGroup().addTo(map);
+const restrictedLayer=L.layerGroup().addTo(map);
+
+locations.forEach(loc=>{
+  const marker=L.marker([loc.lat,loc.lng]);
+  let popup=`<b>${loc.address}</b><br>`;
+  loc.clinics.forEach(c=>{
+    popup+=`${c.name}<br>${c.phone}<br><br>`;
+  });
+  marker.bindPopup(popup);
+  clinicCluster.addLayer(marker);
+
+  L.circle([loc.lat,loc.lng],{
+    radius:1000,
+    color:'blue',
+    weight:1,
+    fillOpacity:0.05
+  }).addTo(bufferLayer);
+});
+
+map.addLayer(clinicCluster);
+map.addLayer(bufferLayer);
+
+/* ---------------- Zoning ---------------- */
+
+fetch('industrial-zones.json')
+.then(r=>r.json())
+.then(data=>{
+  L.geoJSON(data,{style:{color:'orange',weight:1,fillOpacity:0.15}})
+  .addTo(industrialLayer);
+});
+
+fetch('restricted-zones.json')
+.then(r=>r.json())
+.then(data=>{
+  L.geoJSON(data,{style:{color:'black',weight:1,fillOpacity:0.25}})
+  .addTo(restrictedLayer);
+});
+
+/* ---------------- Income Data ---------------- */
 
 let planningAreas=null;
 let incomeLookup=null;
-let populationDensityLookup=null;
 
 fetch('planning-areas.geojson')
 .then(r=>r.json())
@@ -97,11 +177,72 @@ fetch('income-by-planning-area.json')
 .then(r=>r.json())
 .then(data=>incomeLookup=data);
 
-fetch('population-density-by-planning-area.json')
-.then(r=>r.json())
-.then(data=>populationDensityLookup=data);
+/* ---------------- Grid ---------------- */
+
+let grids={};
+
+Promise.all([
+fetch('grid-1km.json').then(r=>r.json()),
+fetch('grid-2km.json').then(r=>r.json()),
+fetch('grid-3km.json').then(r=>r.json())
+]).then(([g1,g2,g3])=>{
+  grids[1]=g1;
+  grids[2]=g2;
+  grids[3]=g3;
+  renderGrid();
+});
+
+function renderGrid(){
+  gridLayer.clearLayers();
+
+  const r=document.getElementById('radiusSelect').value;
+  const maxC=parseInt(document.getElementById('maxClinics').value);
+  const minRes=parseFloat(document.getElementById('minRes').value)/100;
+
+  grids[r].forEach(cell=>{
+    if(cell.dominant_type!=="residential") return;
+    if(cell.clinic_count>maxC) return;
+    if(cell.residential_pct<minRes) return;
+
+    L.rectangle([
+      [cell.lat,cell.lng],
+      [cell.lat+0.0035,cell.lng+0.0035]
+    ],{
+      color:'green',
+      weight:0.3,
+      fillOpacity:0.4
+    }).addTo(gridLayer);
+  });
+}
+
+document.getElementById('radiusSelect').onchange=renderGrid;
+document.getElementById('maxClinics').oninput=renderGrid;
+document.getElementById('minRes').oninput=renderGrid;
+
+/* ---------------- Postal Search ---------------- */
+
+function haversine(a,b,c,d){
+  const R=6371000;
+  const toRad=x=>x*Math.PI/180;
+  const dLat=toRad(c-a);
+  const dLon=toRad(d-b);
+  const x=Math.sin(dLat/2)**2+
+          Math.cos(toRad(a))*Math.cos(toRad(c))*
+          Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+function classify(count){
+  if(count===0) return "White Space";
+  if(count===1) return "Very Low Competition";
+  if(count<=3) return "Moderate Competition";
+  return "High Competition";
+}
 
 function searchPostal(){
+
+  searchLineLayer.clearLayers();
+  map.addLayer(searchLineLayer);
 
   const postal=document.getElementById('postalInput').value;
 
@@ -116,30 +257,46 @@ function searchPostal(){
     map.setView([lat,lng],15);
     L.marker([lat,lng]).addTo(map);
 
-    let html="";
+    let counts={1:0,2:0,3:0};
 
-    if(planningAreas && incomeLookup && populationDensityLookup){
+    let distances=locations.map(loc=>{
+      const d=haversine(lat,lng,loc.lat,loc.lng);
+      if(d<=1000) counts[1]++;
+      if(d<=2000) counts[2]++;
+      if(d<=3000) counts[3]++;
+      return {...loc,dist:d};
+    });
 
+    distances.sort((a,b)=>a.dist-b.dist);
+
+    let html="<h4>Competition Overview</h4>";
+    [1,2,3].forEach(r=>{
+      html+=`${r}km: <b>${counts[r]}</b> — ${classify(counts[r])}<br>`;
+    });
+
+    html+="<hr><h4>Nearest 3 Clinics</h4>";
+
+    distances.slice(0,3).forEach(d=>{
+      L.polyline([[lat,lng],[d.lat,d.lng]],{color:'red'})
+      .addTo(searchLineLayer);
+
+      html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
+    });
+
+    /* --------- Income Integration --------- */
+
+    if(planningAreas && incomeLookup){
       const pt=turf.point([lng,lat]);
 
       for(let feature of planningAreas.features){
         if(turf.booleanPointInPolygon(pt,feature)){
-
           const areaName=feature.properties.PLN_AREA_N.toUpperCase();
-          const densityData=populationDensityLookup[areaName];
           const income=incomeLookup[areaName];
 
-          html+=`<h4>Planning Area</h4>${areaName}`;
-
-          if(densityData){
-            html+=`<br><b>Population Density:</b> ${densityData.density_per_km2.toLocaleString()} / km²`;
-            html+=`<br><b>Resident Population:</b> ${densityData.population.toLocaleString()}`;
-          }
-
+          html+=`<hr><h4>Planning Area</h4>${areaName}`;
           if(income){
             html+=`<br><b>Median Monthly HH Income:</b> $${Math.round(income).toLocaleString()}`;
           }
-
           break;
         }
       }
@@ -153,6 +310,31 @@ function searchPostal(){
 function closePanel(){
   document.getElementById('sidePanel').classList.remove('open');
 }
+
+/* ---------------- Legend ---------------- */
+
+const legend=L.control({position:"bottomleft"});
+legend.onAdd=function(){
+  const div=L.DomUtil.create("div","legend");
+  div.innerHTML=`
+  <b>Legend</b><br><br>
+  <span style="background:green;width:14px;height:14px;display:inline-block;"></span> Residential Opportunity<br>
+  <span style="background:orange;width:14px;height:14px;display:inline-block;"></span> Industrial<br>
+  <span style="background:black;width:14px;height:14px;display:inline-block;"></span> Restricted<br>
+  <span style="color:blue;">◯</span> 1km Buffer<br>
+  <span style="color:red;">—</span> Evaluation Lines
+  `;
+  return div;
+};
+legend.addTo(map);
+
+L.control.layers(null,{
+  "Clinics":clinicCluster,
+  "1km Buffers":bufferLayer,
+  "Opportunity Grid":gridLayer,
+  "Industrial":industrialLayer,
+  "Restricted":restrictedLayer
+},{position:'topright'}).addTo(map);
 
 </script>
 </body>
