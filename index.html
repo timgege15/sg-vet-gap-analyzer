@@ -104,6 +104,7 @@ body { margin:0; font-family:Arial; }
 <script src="locations.js"></script>
 
 <script>
+
 /* Enter key support */
 document.addEventListener("DOMContentLoaded", function(){
   document.getElementById("postalInput").addEventListener("keydown", function(e){
@@ -164,18 +165,21 @@ fetch('restricted-zones.json')
   .addTo(restrictedLayer);
 });
 
-/* ---------------- Income Data ---------------- */
+/* ---------------- Demographics ---------------- */
 
 let planningAreas=null;
 let incomeLookup=null;
+let populationDensityLookup=null;
 
-fetch('planning-areas.geojson')
-.then(r=>r.json())
-.then(data=>planningAreas=data);
-
-fetch('income-by-planning-area.json')
-.then(r=>r.json())
-.then(data=>incomeLookup=data);
+Promise.all([
+  fetch('planning-areas.geojson').then(r=>r.json()),
+  fetch('income-by-planning-area.json').then(r=>r.json()),
+  fetch('population-density-by-planning-area.json').then(r=>r.json())
+]).then(([pa,income,density])=>{
+  planningAreas=pa;
+  incomeLookup=income;
+  populationDensityLookup=density;
+});
 
 /* ---------------- Grid ---------------- */
 
@@ -283,20 +287,29 @@ function searchPostal(){
       html+=`${d.clinics[0].name}<br>${Math.round(d.dist)} m<br><br>`;
     });
 
-    /* --------- Income Integration --------- */
+    /* --------- Population + Income --------- */
 
-    if(planningAreas && incomeLookup){
+    if(planningAreas && incomeLookup && populationDensityLookup){
       const pt=turf.point([lng,lat]);
 
       for(let feature of planningAreas.features){
         if(turf.booleanPointInPolygon(pt,feature)){
-          const areaName=feature.properties.PLN_AREA_N.toUpperCase();
+
+          const areaName=feature.properties.PLN_AREA_N.toUpperCase().trim();
+          const densityData=populationDensityLookup[areaName];
           const income=incomeLookup[areaName];
 
           html+=`<hr><h4>Planning Area</h4>${areaName}`;
+
+          if(densityData){
+            html+=`<br><b>Population Density:</b> ${densityData.density_per_km2.toLocaleString()} / km²`;
+            html+=`<br><b>Resident Population:</b> ${densityData.population.toLocaleString()}`;
+          }
+
           if(income){
             html+=`<br><b>Median Monthly HH Income:</b> $${Math.round(income).toLocaleString()}`;
           }
+
           break;
         }
       }
