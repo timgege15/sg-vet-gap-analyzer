@@ -168,11 +168,6 @@ fetch('restricted-zones.json')
 
 let planningAreas=null;
 let incomeLookup=null;
-let populationDensityLookup=null;
-
-fetch('population-density-by-planning-area.json')
-.then(r=>r.json())
-.then(data=>populationDensityLookup=data);
 
 fetch('planning-areas.geojson')
 .then(r=>r.json())
