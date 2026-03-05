@@ -126,6 +126,7 @@ document.addEventListener("DOMContentLoaded", function(){
 });
 
 const map=L.map('map',{zoomControl:false}).setView([1.3521,103.8198],11);
+let evaluationMarker=null;
 L.control.zoom({position:'topright'}).addTo(map);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
@@ -271,7 +272,8 @@ function searchPostal(){
     map.setView([lat,lng],15);
 
     /* PINK MARKER HERE */
-    L.marker([lat,lng],{icon:pinkIcon}).addTo(map);
+    if(evaluationMarker) map.removeLayer(evaluationMarker);
+    evaluationMarker = L.marker([lat,lng],{icon:pinkIcon}).addTo(map);
 
     let counts={1:0,2:0,3:0};
 
