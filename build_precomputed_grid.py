@@ -1,137 +1,168 @@
 import json
 import math
-import re
+from shapely.geometry import shape, box
+from shapely.strtree import STRtree
 
-ZONING_FILE = "ura-zoning-subset.geojson"
-CLINIC_FILE = "locations.js"
-OUTPUT_FILE = "grid-precomputed.json"
+# ---------------- CONFIG ---------------- #
 
-CELL_SIZE = 0.0035
-BOUNDS = [
-    [1.20, 103.60],
-    [1.48, 104.05]
-]
+GRID_SIZE = 0.0035
+BOUNDING_BOX = (1.20, 103.60, 1.48, 104.05)
+
+ZONING_FILE = "/Users/zijiaye/Downloads/MasterPlan2019LandUselayer.geojson"
+INDUSTRIAL_FILE = "industrial-zones.json"
+RESTRICTED_FILE = "restricted-zones.json"
+CLINICS_FILE = "locations.js"
+
+RADII = [1, 2, 3]
+
+# ---------------------------------------- #
 
 print("Loading zoning...")
 with open(ZONING_FILE) as f:
     zoning = json.load(f)
 
-print("Loading clinics...")
+print("Loading industrial...")
+with open(INDUSTRIAL_FILE) as f:
+    industrial = json.load(f)
 
-# Extract JSON array safely from JS file
-with open(CLINIC_FILE) as f:
+print("Loading restricted...")
+with open(RESTRICTED_FILE) as f:
+    restricted = json.load(f)
+
+print("Loading clinics...")
+with open(CLINICS_FILE) as f:
     text = f.read()
 
-match = re.search(r'\[\s*{.*}\s*\]', text, re.DOTALL)
-if not match:
-    raise Exception("Could not extract clinic JSON from locations.js")
+start = text.find("[")
+end = text.rfind("]") + 1
+clinics = json.loads(text[start:end])
+clinic_points = [(c["lat"], c["lng"]) for c in clinics]
 
-clinics = json.loads(match.group())
+# ---------------- PREPARE GEOMETRIES ---------------- #
+
+print("Preparing residential polygons...")
+
+def safe_shape(geom):
+    g = shape(geom)
+    if not g.is_valid:
+        g = g.buffer(0)
+    return g
+
+residential_polys = []
+for feat in zoning["features"]:
+    desc = feat["properties"].get("LU_DESC","")
+    if desc in [
+        "RESIDENTIAL",
+        "RESIDENTIAL / INSTITUTION",
+        "RESIDENTIAL WITH COMMERCIAL AT 1ST STOREY"
+    ]:
+        residential_polys.append(safe_shape(feat["geometry"]))
+
+industrial_polys = [safe_shape(f["geometry"]) for f in industrial["features"]]
+restricted_polys = [safe_shape(f["geometry"]) for f in restricted["features"]]
+
+# Build spatial index
+res_index = STRtree(residential_polys)
+ind_index = STRtree(industrial_polys)
+resr_index = STRtree(restricted_polys)
+
+# ---------------- DISTANCE FUNCTION ---------------- #
 
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
-    dLat = math.radians(lat2 - lat1)
-    dLon = math.radians(lon2 - lon1)
-    a = (math.sin(dLat/2)**2 +
-         math.cos(math.radians(lat1)) *
-         math.cos(math.radians(lat2)) *
-         math.sin(dLon/2)**2)
+    toRad = lambda x: x * math.pi / 180
+    dLat = toRad(lat2 - lat1)
+    dLon = toRad(lon2 - lon1)
+    a = math.sin(dLat/2)**2 + \
+        math.cos(toRad(lat1)) * math.cos(toRad(lat2)) * \
+        math.sin(dLon/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
-def point_in_poly(lat, lng, poly):
-    inside = False
-    x, y = lng, lat
-    for i in range(len(poly)):
-        j = (i - 1) % len(poly)
-        xi, yi = poly[i]
-        xj, yj = poly[j]
-        if ((yi > y) != (yj > y)) and \
-           (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
-            inside = not inside
-    return inside
+# ---------------- GRID BUILD ---------------- #
 
-print("Precomputing zoning bounding boxes...")
+min_lat, min_lng, max_lat, max_lng = BOUNDING_BOX
 
-features = []
-for f in zoning["features"]:
-    geom = f["geometry"]
-    lu = f["properties"]["LU_DESC"].upper()
+for radius in RADII:
 
-    if geom["type"] == "Polygon":
-        coords = geom["coordinates"][0]
-    elif geom["type"] == "MultiPolygon":
-        coords = geom["coordinates"][0][0]
-    else:
-        continue
+    print(f"\nBuilding grid for {radius}km...")
+    cells = []
 
-    lngs = [c[0] for c in coords]
-    lats = [c[1] for c in coords]
+    lat = min_lat
+    while lat <= max_lat:
+        lng = min_lng
+        while lng <= max_lng:
 
-    features.append({
-        "coords": coords,
-        "bbox": {
-            "minLat": min(lats),
-            "maxLat": max(lats),
-            "minLng": min(lngs),
-            "maxLng": max(lngs)
-        },
-        "lu": lu
-    })
+            cell_poly = box(lng, lat, lng+GRID_SIZE, lat+GRID_SIZE)
+            cell_area = cell_poly.area
 
-grid = []
+            residential_area = 0
+            industrial_area = 0
+            restricted_area = 0
 
-print("Building grid...")
+            for idx in res_index.query(cell_poly):
+                poly = residential_polys[idx]
+                try:
+                    if poly.intersects(cell_poly):
+                        residential_area += poly.intersection(cell_poly).area
+                except:
+                    continue
 
-lat = BOUNDS[0][0]
-while lat <= BOUNDS[1][0]:
-    lng = BOUNDS[0][1]
-    while lng <= BOUNDS[1][1]:
+            for idx in ind_index.query(cell_poly):
+                poly = industrial_polys[idx]
+                try:
+                    if poly.intersects(cell_poly):
+                        industrial_area += poly.intersection(cell_poly).area
+                except:
+                    continue
 
-        centerLat = lat + CELL_SIZE/2
-        centerLng = lng + CELL_SIZE/2
+            for idx in resr_index.query(cell_poly):
+                poly = restricted_polys[idx]
+                try:
+                    if poly.intersects(cell_poly):
+                        restricted_area += poly.intersection(cell_poly).area
+                except:
+                    continue
 
-        zone = None
-
-        for f in features:
-            b = f["bbox"]
-            if centerLat < b["minLat"] or centerLat > b["maxLat"] \
-               or centerLng < b["minLng"] or centerLng > b["maxLng"]:
+            if residential_area == 0 and industrial_area == 0 and restricted_area == 0:
+                lng += GRID_SIZE
                 continue
 
-            if point_in_poly(centerLat, centerLng, f["coords"]):
-                zone = f["lu"]
-                break
+            residential_pct = residential_area / cell_area
+            industrial_pct = industrial_area / cell_area
+            restricted_pct = restricted_area / cell_area
 
-        if not zone:
-            lng += CELL_SIZE
-            continue
+            dominant = max(
+                [("residential", residential_pct),
+                 ("industrial", industrial_pct),
+                 ("restricted", restricted_pct)],
+                key=lambda x: x[1]
+            )[0]
 
-        # INDUSTRIAL
-        if any(k in zone for k in ["INDUSTRIAL","BUSINESS","WHITE"]):
-            grid.append({"lat": lat, "lng": lng, "type": "industrial"})
+            center_lat = lat + GRID_SIZE/2
+            center_lng = lng + GRID_SIZE/2
 
-        # RESTRICTED
-        elif any(k in zone for k in
-            ["MILITARY","DEFENCE","SPECIAL","UTILITY","TRANSPORT","PORT","AIRPORT"]):
-            grid.append({"lat": lat, "lng": lng, "type": "restricted"})
+            clinic_count = 0
+            for cl_lat, cl_lng in clinic_points:
+                if haversine(center_lat, center_lng, cl_lat, cl_lng) <= radius * 1000:
+                    clinic_count += 1
 
-        # RESIDENTIAL
-        elif "RESIDENTIAL" in zone:
+            cells.append({
+                "lat": lat,
+                "lng": lng,
+                "clinic_count": clinic_count,
+                "residential_pct": round(residential_pct,4),
+                "industrial_pct": round(industrial_pct,4),
+                "restricted_pct": round(restricted_pct,4),
+                "dominant_type": dominant
+            })
 
-            minDist = float("inf")
-            for c in clinics:
-                d = haversine(centerLat, centerLng, c["lat"], c["lng"])
-                if d < minDist:
-                    minDist = d
+            lng += GRID_SIZE
+        lat += GRID_SIZE
 
-            if minDist > 1000:
-                grid.append({"lat": lat, "lng": lng, "type": "opportunity"})
+    outfile = f"grid-{radius}km.json"
+    print(f"Saving {outfile} ({len(cells)} cells)...")
 
-        lng += CELL_SIZE
-    lat += CELL_SIZE
+    with open(outfile, "w") as f:
+        json.dump(cells, f)
 
-print("Saving grid...")
-with open(OUTPUT_FILE, "w") as f:
-    json.dump(grid, f)
-
-print("Done. Cells:", len(grid))
+print("\nDone.")
